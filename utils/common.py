@@ -1,4 +1,4 @@
-class weekday(object):
+class weekday:
     __slots__ = ["weekday", "n"]
 
     def __init__(self, weekday, n=None):
@@ -36,7 +36,7 @@ class weekday(object):
             return "%s(%+d)" % (s, self.n)
 
 
-class cached_property(object):
+class cached_property:
     """
     Decorator that converts a method with a single self argument into a
     property cached on the instance.

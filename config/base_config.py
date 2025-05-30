@@ -17,7 +17,7 @@ from utils.common import cached_property
 logger = logging.getLogger('gnana.%s' % __name__)
 
 
-class BaseConfig(object):
+class BaseConfig:
     """
     base class for config objects
 

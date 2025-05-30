@@ -15,7 +15,7 @@ from .relativedelta import relativedelta
 excelBase = datetime(1899, 12, 30, 0, 0, 0)
 base_epoch = datetime(1970, 1, 1, tzinfo=pytz.utc)
 
-class EpochClass(object):
+class EpochClass:
     """ epoch function returns an object of this type which can be used as long for all
     computations. However printing the values will result in displaying the value
     as a date time in the timezone preference based on the shell.
