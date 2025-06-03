@@ -1,33 +1,21 @@
-# Build in imports
-import uuid
 import logging
 
-# Third party imports
-# TODO: Replace this with library import
 from aviso.settings import sec_context
-from pymongo import UpdateOne, InsertOne, ReturnDocument
+from pymongo import InsertOne, ReturnDocument, UpdateOne
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 
-# Local imports
-# from micro_fm_app.base.infra import bulk_write
-from utils.date_utils import epoch, get_prev_eod, next_period_by_epoch, prev_period_by_epoch
-from utils.misc_utils import is_lead_service, iter_chunks
-# from .read import fetch_descendant_ids, fetch_ancestors, fetch_closest_boundaries, fetch_boundry, fetch_prev_boundaries,fetch_hidden_nodes
-
-
-# TODO: bad imports?
-# from utils.dateUtils import now, datetime2epoch, current_period, epoch, next_period_by_epoch, prev_period_by_epoch
-# from micro_fm_app.base.infra import AUDIT_COLL
+from infra import (AUDIT_COLL, DEALS_COLL, DRILLDOWN_COLL,
+                   DRILLDOWN_LEADS_COLL, HIER_COLL, HIER_LEADS_COLL)
+from infra.read import (fetch_ancestors, fetch_boundry,
+                        fetch_closest_boundaries, fetch_descendant_ids,
+                        fetch_hidden_nodes, fetch_prev_boundaries)
+from utils.date_utils import (epoch, get_prev_eod, next_period_by_epoch,
+                              prev_period_by_epoch)
+from utils.misc_utils import (BootstrapError, CycleError, is_lead_service,
+                              iter_chunks)
 
 logger = logging.getLogger('aviso-core.%s' % __name__)
 
-# Constants
-HIER_COLL = 'hierarchy'
-DRILLDOWN_COLL = 'drilldowns'
-HIER_LEADS_COLL = 'hierarchy_leads'
-DRILLDOWN_LEADS_COLL = 'drilldowns_leads'
-AUDIT_COLL = 'audit_log'
-DEALS_COLL = 'deals'
 
 def _set_run_full_mode_flag(value):
     sec_context.details.set_flag(DEALS_COLL, 'run_full_mode', value)
@@ -207,7 +195,7 @@ def create_many_nodes(node_to_parent,
         is_end_date_none = True
 
     updates = []
-    for node, parent in node_to_parent.iteritems():
+    for node, parent in node_to_parent.items():
         record = {'from': as_of,
                   'to': as_to if not is_end_date_none else None,
                   'how': signature,
@@ -629,11 +617,3 @@ def bulk_write(operations,
         chunk_size /= 2
         attempts -= 1
     return len(failed_writes) <= success_threshold
-
-
-class BootstrapError(Exception):
-    pass
-
-
-class CycleError(Exception):
-    pass

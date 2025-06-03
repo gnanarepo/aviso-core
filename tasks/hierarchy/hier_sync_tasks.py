@@ -1,6 +1,13 @@
 import logging
 
 from config import HierConfig
+from config.hier_config import HIERARCHY_BUILDERS
+from infra.read import (fetch_hidden_nodes,
+                        fetch_node_to_parent_mapping_and_labels,
+                        get_period_as_of)
+from utils.misc_utils import is_lead_service, try_index
+from utils.mongo_writer import (create_many_nodes, create_node, hide_node,
+                                label_node, move_node, unhide_node)
 
 logger = logging.getLogger('aviso-core.%s' % __name__)
 
@@ -9,7 +16,10 @@ class HierSyncTask:
 
     def execute(self, period):
         try:
-            result = Sync(period=period)
+            sync_obj = Sync(period=period)
+            sync_obj.process()
+            sync_obj.persist()
+            result = sync_obj.return_value
             return {'success': True, 'result': result}
         except Exception as e:
             logger.exception(e.message)
@@ -92,13 +102,13 @@ class _Sync:
         new_nodes = set(self.new_node_to_parent)
 
         self.deleted_nodes = curr_nodes - new_nodes
-        self.created_nodes = {node: parent for node, parent in self.new_node_to_parent.iteritems()
+        self.created_nodes = {node: parent for node, parent in self.new_node_to_parent.items()
                               if node not in curr_nodes and node not in hidden_nodes}
-        self.resurrected_nodes = {node for node, _ in self.new_node_to_parent.iteritems()
+        self.resurrected_nodes = {node for node, _ in self.new_node_to_parent.items()
                                   if node not in curr_nodes and node in hidden_nodes}
-        self.moved_nodes = {node: parent for node, parent in self.new_node_to_parent.iteritems()
+        self.moved_nodes = {node: parent for node, parent in self.new_node_to_parent.items()
                             if node in self.curr_node_to_parent and parent != self.curr_node_to_parent[node]}
-        self.relabeled_nodes = {node: label for node, label in self.new_labels.iteritems()
+        self.relabeled_nodes = {node: label for node, label in self.new_labels.items()
                                 if node not in self.created_nodes
                                 and node not in hidden_nodes
                                 and label != self.curr_labels[node]}
@@ -127,7 +137,7 @@ class _Sync:
                       hide_descendants=False,
                       service=self.service)
 
-        for node, parent in self.created_nodes.iteritems():
+        for node, parent in self.created_nodes.items():
             create_node(parent,
                         node,
                         self.new_labels[node],
@@ -136,7 +146,7 @@ class _Sync:
                         signature='hier_sync_create',
                         service=self.service)
 
-        for node, parent in self.moved_nodes.iteritems():
+        for node, parent in self.moved_nodes.items():
             move_node(parent,
                       node,
                       self.timestamp,
@@ -144,7 +154,7 @@ class _Sync:
                       signature='hier_sync_move',
                       ignore_cycles=self.config.dummy_tenant, service=self.service)
 
-        for node, label in self.relabeled_nodes.iteritems():
+        for node, label in self.relabeled_nodes.items():
             label_node(node,
                        label,
                        self.config,

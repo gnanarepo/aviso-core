@@ -1,19 +1,20 @@
-
-# Built in imports
 import collections
+import logging
+import re
 from datetime import datetime, timedelta
 from itertools import chain
-import re
+
 import pytz
-import logging
 # Third part library imports
 # TODO: Replace this with new library for Infra repo
 from aviso.settings import sec_context
 
-# Local imports
+from .cache_utils import memcached
 from .relativedelta import relativedelta
 
-
+xl2datetime = lambda xl_dt: EpochClass.from_xldate(xl_dt).as_datetime()
+xl2datetime_ttz = lambda xl_dt: EpochClass.from_xldate(xl_dt, False).as_datetime()
+datetime2epoch = lambda dt: EpochClass.from_datetime(dt).as_epoch()
 excelBase = datetime(1899, 12, 30, 0, 0, 0)
 epoch2datetime = lambda ep: EpochClass.from_epoch(ep).as_datetime()
 base_epoch = datetime(1970, 1, 1, tzinfo=pytz.utc)
@@ -21,8 +22,10 @@ period = collections.namedtuple("period", ["mnemonic", "begin", "end"])
 onems = timedelta(milliseconds=1)
 
 ALL_PERIODS_CACHE = {}
-
+PRD_STR_CACHE = {}
+ALL_PERIOD_RANGES_CACHE = {}
 logger = logging.getLogger('aviso-core.%s' % __name__)
+now = lambda: EpochClass().as_datetime()
 
 class EpochClass:
     """ epoch function returns an object of this type which can be used as long for all
@@ -324,6 +327,23 @@ def monthly_periods(q_prd, period_type='Q'):
         else:
             yield period(mnth_mnm, bom_dt, eom_dt)
 
+def period_range(a_datetime_begin=None, a_datetime_end=None, period_type='W'):
+    return period_details_range(a_datetime_begin, a_datetime_end, period_type)
+
+def weekly_periods(q_prd, period_type='Q'):
+    """ Returns all weekly periods for a given quarterly period.
+    The format for the weekly periods is YYYYMM(W)WW
+    Week is defined as the following:
+        1. First Monday of quarter is week2, if first day of quarter is not a Monday
+        2. Days after last sunday of quarter is last week
+        3. Weeks reset every quarter
+    Takes either a period namedtuple OR a string corresponding to a qtr mnem.
+    NOTE: This is the UI / App layer format.
+    """
+    if isinstance(q_prd, str):
+        q_prd = period_details_by_mnemonic(q_prd, period_type)
+    return period_range(q_prd.begin, q_prd.end, period_type='W')
+
 def get_date_time_for_extended_month(year, month, tzinfo, day=1):
     if month < 0:
         year = year - 1
@@ -559,3 +579,470 @@ def next_period_by_epoch(epoch_time, period_type='Q', skip=1, count=1):
 
 def prev_period_by_epoch(epoch_time, period_type='Q', skip=1, count=1):
     return period_details(epoch2datetime(epoch_time), period_type, delta=-skip, count=count)
+
+
+def is_same_day(first, second):
+    '''
+    Accepts two dates in epoch and tells whether they fall on the same day.
+    '''
+    if first is None or second is None:
+        return False
+    first_dt = first.as_datetime()
+    second_dt = second.as_datetime()
+    if (first_dt.year, first_dt.month, first_dt.day) == (second_dt.year, second_dt.month, second_dt.day):
+        return True
+    else:
+        return False
+
+def get_eom(ep):
+    """
+    get end of month
+    """
+    epdt = ep.as_datetime()
+    future = epdt + relativedelta(months=1)
+    eom = future.replace(day=1, hour=23, minute=59, second=59, microsecond=999000) + relativedelta(days=-1)
+    #Applying Daylight savings
+    tzinfo = eom.tzinfo
+    eom = eom.replace(tzinfo=None)
+    eom = tzinfo.localize(eom, is_dst=tzinfo.dst(eom))
+    return epoch(eom)
+
+def get_eod(ep):
+    """
+    get end of day
+    """
+    epdt = ep.as_datetime()
+    eod = epdt.replace(hour=23, minute=59, second=59, microsecond=0)
+    tzinfo = eod.tzinfo
+    eod = eod.replace(tzinfo=None)
+    eod = tzinfo.localize(eod, is_dst=tzinfo.dst(eod))
+    return epoch(eod)
+
+
+def get_eoq_for_period(period, period_info, return_type='str'):
+    """
+    get end of period based on period and period_info
+    """
+    if len(period) == 4:
+        if return_type == 'datetime':
+            return epoch(current_period(period_info[0].begin, 'Y').end).as_datetime()
+        return str(epoch(current_period(period_info[0].begin,'Y').end))
+    if 'Q' not in period:
+        return None
+    for p in period_info:
+        if p.mnemonic == period:
+            if return_type == 'datetime':
+                return epoch(p.end).as_datetime()
+            return str(epoch(p.end))
+    return None
+
+def prev_period(a_datetime=None, period_type='Q', skip=1, count=1):
+    return period_details(a_datetime, period_type, delta=-skip, count=count)
+
+def prev_periods_allowed_in_deals():
+    prev_periods = []
+    for i in range(0, 1):
+        # For getting the qtrs for 1 year
+        prev_periods.append(prev_period(period_type='Y', skip=i).mnemonic)
+        for j in range(0, 4):
+            if j not in prev_periods:
+                prev_periods.append(prev_period(period_type='Q', skip=j + (4 * i)).mnemonic)
+    return prev_periods
+
+def get_nested_with_placeholder(input_dict, nesting, placeholder_dict, default=None):
+    """
+    get value (or dict) from nested dict by specifying the levels to go through
+    """
+    if not nesting:
+        return input_dict
+    try:
+
+        for level in nesting[:-1]:
+            input_dict = input_dict.get(level % placeholder_dict, {})
+
+        return input_dict.get(nesting[-1], default)
+    except AttributeError:
+        # Not a completely nested dictionary
+        return default
+
+@memcached
+def get_all_periods__m(period_type, filt_out_qs=None):
+    return get_all_periods(period_type, filt_out_qs)
+
+def period_rng_from_mnem(mnemonic):
+    # using tuples instead of namedtuples in here because this is performance critical
+    tenant_name = sec_context.name
+    month_adjustments = sec_context.details.get_config(category='forecast', config_name='month_adjustments')
+    try:
+        return ALL_PERIOD_RANGES_CACHE[tenant_name, mnemonic]
+    except KeyError:
+        all_periods = get_all_periods('Y') if len(mnemonic) == 4 else (get_all_periods('W') if 'W' in mnemonic else get_all_periods('Q'))
+        for period in all_periods:
+            if period.mnemonic == mnemonic:
+                mnem_range = (datetime2epoch(period.begin), datetime2epoch(period.end))
+                ALL_PERIOD_RANGES_CACHE[tenant_name, mnemonic] = mnem_range
+                return mnem_range
+            elif 'Q' not in mnemonic and 'W' not in mnemonic and (-1 <= int(mnemonic[:4]) - int(period.mnemonic[:4]) <= 1):
+                boq_epoch = epoch(period.begin)
+                if not month_adjustments:
+                    for m in range(0, 3):
+                        bom_ep = boq_epoch + relativedelta(months=m)
+                        bom_dt = bom_ep.as_datetime()
+                        month_mnem = str(bom_dt.year) + format(bom_dt.month, '02')
+                        if mnemonic == month_mnem:
+                            mnem_range = (bom_ep.as_epoch(), get_eom(bom_ep).as_epoch())
+                            ALL_PERIOD_RANGES_CACHE[tenant_name, mnemonic] = mnem_range
+                            return mnem_range
+                else:
+                    months = [current_period(boq_epoch.as_datetime(), 'M')]
+                    for m in range(0, 2):
+                        months.append(current_period(months[m].end+relativedelta(days=1), 'M'))
+                    #year = current_period(boq_epoch.as_datetime(), 'Q').mnemonic[:4]
+                    for m in range(0, 3):
+                        adjust_begin, adjust_end = month_adjustments.get(months[m].mnemonic, (0, 0))
+                        bom_dt = epoch(months[m].begin).as_datetime()
+                        bom_dt_adj = epoch(months[m].begin).as_datetime() - timedelta(days=adjust_begin)
+                        bom_dt = max(bom_dt, bom_dt_adj)
+                        month_mnem = str(bom_dt.year) + format(bom_dt.month, '02')
+                        if mnemonic == month_mnem:
+                            mnem_range = (datetime2epoch(months[m].begin), datetime2epoch(months[m].end))
+                            ALL_PERIOD_RANGES_CACHE[tenant_name, mnemonic] = mnem_range
+                            return mnem_range
+        else:
+            raise Exception("No match for mnemonic: %s", mnemonic)
+
+def get_bow2(ep):
+    """
+    Compute the weekly boundary (get_bow) timestamp for STLY/STLQ calculations.
+
+    For Sunday, Monday, Tuesday, return the previous Saturday's EOD.
+    For Wednesday, Thursday, Friday, Saturday, return the upcoming Saturday's EOD.
+
+    Parameters:
+        ep: An epoch instance that provides an `as_datetime()` method.
+
+    Returns:
+        An epoch instance representing the boundary of the week, set to Saturday 23:59:59.999.
+    """
+    # Convert epoch to datetime
+    epdt = ep.as_datetime()
+    # Python's weekday: Monday=0, Tuesday=1, ... Saturday=5, Sunday=6
+    w = epdt.weekday()
+
+    if w in [6, 0, 1]:
+        # For Sunday (6), Monday (0), Tuesday (1), return previous Saturday's date.
+        # Calculate days to subtract: (w - 5) mod 7 gives: for Sunday: 1, Monday: 2, Tuesday: 3.
+        delta = (w - 5) % 7
+        boundary_dt = epdt - timedelta(days=delta)
+    else:
+        # For Wednesday (2), Thursday (3), Friday (4), Saturday (5), return upcoming Saturday.
+        # Calculate days to add: (5 - w) mod 7 gives: for Wednesday: 3, Thursday: 2, Friday: 1, Saturday: 0.
+        delta = (5 - w) % 7
+        boundary_dt = epdt + timedelta(days=delta)
+
+    # Set the time to 23:59:59.999 (using 999000 microseconds)
+    boundary_dt = boundary_dt.replace(hour=23, minute=59, second=59, microsecond=999000)
+    return epoch(boundary_dt)
+
+def get_week_ago(ep):
+    """
+    get date a week ago from epoch, returns an epoch
+    """
+    day = ep.as_datetime()
+    day = day.replace(minute=0, second=0, microsecond=0)
+    week_ago = day - timedelta(days=6)
+    return epoch(week_ago.replace(hour=0,minute=0, second=0, microsecond=0))
+
+
+def get_bom(ep):
+    """
+    get beginning of month from epoch, returns an epoch
+    """
+    bom = ep.as_datetime().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    #Applying Daylight savings
+    tzinfo = bom.tzinfo
+    bom = bom.replace(tzinfo=None)
+    bom = tzinfo.localize(bom, is_dst=tzinfo.dst(bom))
+    return epoch(bom.replace(hour=0, minute=0, second=0, microsecond=0))
+
+
+def get_boq(ep):
+    """
+    get beginning of period from epoch, returns an epoch
+    """
+    period_info = period_details(ep.as_datetime())
+    return epoch(period_info.begin)
+
+
+def lazy_get_boq(ep):
+    """
+    get inexact beginning of quarter by going back 90 days, returns an epoch
+    """
+    day = ep.as_datetime()
+    return epoch(day.replace(minute=0, second=0) - timedelta(days=90))
+
+
+def get_eoq(ep):
+    """
+    get end of period from epoch, returns an epoch
+    """
+    period_info = period_details(ep.as_datetime())
+    return epoch(period_info.end)
+
+
+def get_future_bom(ep, delta=None, months=0):
+    """
+    get beginning of a future month that months away from epoch, returns an epoch
+    """
+    epdt = ep.as_datetime()
+    future = epdt + delta + relativedelta(months=months)
+    return epoch(future.replace(day=1, hour=0, minute=0, second=0))
+
+
+def get_nextq_mnem(mnem):
+    """
+    get next quarter mnemonic from mnemonic
+    """
+    try:
+        year, q = mnem.split('Q')
+        q = str(int(q) % 4 + 1)
+        year = year if q != '1' else str(int(year) + 1)
+        return 'Q'.join([year, q])
+    except ValueError:
+        year, m = mnem[:4], mnem[4:]
+        m = str(int(m) % 12 + 1)
+        year = year if m != '1' else str(int(year) + 1)
+        return ''.join([year, m.zfill(2)])
+
+
+def get_nextq_mnem_safe(mnem, skip=1):
+    """
+    get next quarter mnemonic from current quarter mnemonic
+    """
+    if len(mnem) == 4:
+        return str(int(mnem)+1)
+    all_prds = get_all_periods('Q')
+    for (curr_q, _curr_beg, _curr_end), (next_q, _next_beg, _next_end) in zip(all_prds, all_prds[skip:]):
+        if curr_q == mnem:
+            return next_q
+    else:
+        return ''
+
+def get_bow(ep):
+    """
+    get beginning of week from epoch, returns an epoch
+    """
+    day = ep.as_datetime()
+    bow = day - timedelta(days=day.weekday())
+    return epoch(bow.replace(hour=0, minute=0, second=0))
+
+def get_prevq_mnem_safe(mnem, skip=1):
+    """
+    get prev quarter mnemonic from current quarter mnemonic
+    """
+    all_prds = get_all_periods('Y') if len(mnem) == 4 else get_all_periods('Q')
+    for (curr_q, _curr_beg, _curr_end), (prev_q, _prev_beg, _prev_end) in zip(all_prds[::-1], all_prds[::-1][skip:]):
+        if curr_q == mnem:
+            return prev_q
+    else:
+        return ''
+
+def get_yest(ep):
+    """
+    get previous day from epoch, returns an epoch
+    """
+    yest = ep.as_datetime() - timedelta(days=1)
+    return epoch(yest.replace(hour=0, minute=0, second=0))
+
+def period_details_range(a_datetime_begin=None, a_datetime_end=None, period_type='W'):
+    if a_datetime_begin is None or a_datetime_end is None:
+        raise Exception("Given range is open ended")
+
+    all_periods = get_all_periods(period_type)
+    periods = []
+    for idx, time_span in enumerate(all_periods):
+        if a_datetime_begin <= time_span[1] and time_span[2] <= a_datetime_end:
+            periods.append(all_periods[idx])
+    if not periods:
+        raise Exception("Given time doesn't fall into any known time span")
+    return periods
+
+def is_valid_mnemonic(mnemonic, period_type='Q'):
+    '''
+    Accepts a mnemonic string and returns whether its a valid mnemonic or not.
+    period_type = Q/M/CM/Y
+    '''
+    if period_type == 'Q':
+        regex = "^\d{4}Q[1-4]$"
+    elif period_type == 'M':
+        regex = "^\d{4}M[0,1]\d$"
+    elif period_type == 'CM':
+        regex = "^\d{4}[0,1]\d$"
+    else:
+        regex = "^\d{4}$"
+    return True if re.match(regex, mnemonic) else False
+
+def get_weekly_periods_info_in_quarter(q_mnemonic, today_epoch):
+    """
+    Computes weekly period information within a given quarter.
+    The function returns a dictionary containing weekly period mnemonics as keys
+    and their corresponding details as values. Each entry includes:
+    - 'begin'
+    - 'end'
+    - 'has_forecast'
+    - 'relative_period'
+    Parameters:
+        q_mnemonic (str): The quarter mnemonic.
+        today_epoch (Epoch): The current date as an epoch timestamp.
+    Returns:
+        dict: A dictionary mapping weekly period mnemonics to their details.
+    """
+
+    from config.periods_config import PeriodsConfig
+    from infra.read import render_period
+
+    period_config = PeriodsConfig()
+    quarter_week_range = weekly_periods(q_mnemonic)
+    now_dt = today_epoch.as_datetime()
+
+    weekly_period_info = {
+        week_range.mnemonic: render_period(week_range, now_dt, period_config)
+        for week_range in quarter_week_range
+    }
+
+    return weekly_period_info
+
+def rng_from_prd_str(std_prd_str, fmt='epoch', period_type='Q', user_level=False):
+    """Given a standard period string, like thisQ, thisM, nextW, etc
+    return the boundaries of that period as a tuple of (begin, end)"""
+
+    if user_level:
+        from config.periods_config import PeriodsConfig
+        periodconfig = PeriodsConfig()
+        from infra.read import get_now
+        today = get_now(periodconfig)
+    else:
+        # TODO: should I import this?
+        from api.app import get_now
+        today = get_now()
+    try:
+        return PRD_STR_CACHE[sec_context.name, std_prd_str, fmt]
+    except KeyError:
+        if is_valid_mnemonic(std_prd_str, period_type):
+            prd_details = period_details_by_mnemonic(std_prd_str, period_type)
+            from_epoch, til_epoch = epoch(prd_details.begin), epoch(prd_details.end)
+        elif std_prd_str == 'thisq' or std_prd_str == 'THIS_Q':
+            cp = current_period()
+            from_epoch, til_epoch = epoch(cp.begin), epoch(cp.end)
+        elif std_prd_str == 'SELECTED_Q':
+            slctd_prd_begin = sec_context.details.get_flag('selected_period', 'slctd_prd_begin', {})
+            slctd_prd_end = sec_context.details.get_flag('selected_period', 'slctd_prd_end', {})
+            from_epoch, til_epoch = epoch(slctd_prd_begin), epoch(slctd_prd_end)
+        elif std_prd_str == 'SELECTED_NEXT':
+            slctd_prd_next_q_start = sec_context.details.get_flag('selected_period', 'slctd_prd_next_q_start', 0)
+            from_epoch, til_epoch = epoch(slctd_prd_next_q_start), None
+        elif std_prd_str == 'ALL':
+            PRD_STR_CACHE[sec_context.name, std_prd_str, fmt] = (None, None)
+            return None, None
+        elif std_prd_str == 'NEXT_Q':
+            nxt = next_period()
+            from_epoch, til_epoch = epoch(nxt.begin), epoch(nxt.end)
+        elif std_prd_str == 'THIS_M':
+            from_epoch, til_epoch = get_bom(today), get_eom(today)
+        elif std_prd_str == 'NEXT_M':
+            diff = relativedelta(months=1)
+            from_epoch, til_epoch = get_bom(today) + diff, get_eom(get_eom(today) + diff)
+
+        elif std_prd_str == 'THIS_W':
+            current_p = current_period().mnemonic
+            weekly_periods_info = get_weekly_periods_info_in_quarter(current_p, today)
+
+            for week_info in weekly_periods_info.values():
+                if week_info['relative_period'] == 'c':
+                    from_epoch, til_epoch = map(epoch, (week_info['begin'], week_info['end']))
+                    break
+
+        elif std_prd_str == 'NEXT_W':
+            diff = relativedelta(weeks=1)
+            current_p = current_period().mnemonic
+            weekly_periods_info = get_weekly_periods_info_in_quarter(current_p, today)
+
+            for week_info in weekly_periods_info.values():
+                if week_info['relative_period'] == 'c':
+                    from_epoch, til_epoch = epoch(week_info['begin']) + diff,   epoch(week_info['end']) + diff
+                    break
+
+        elif std_prd_str == 'next180':
+            from_epoch, til_epoch = epoch(), epoch() + relativedelta(days=180)
+        elif std_prd_str == 'last90':
+            from_epoch, til_epoch = epoch() - relativedelta(days=90), epoch()
+        elif std_prd_str == 'next90':
+            from_epoch, til_epoch = epoch(), epoch() + relativedelta(days=90)
+        elif std_prd_str == 'last30':
+            from_epoch, til_epoch = epoch() - relativedelta(days=30), epoch()
+        elif std_prd_str == 'next30':
+            from_epoch, til_epoch = epoch(), epoch() + relativedelta(days=30)
+        elif std_prd_str == 'last7':
+            from_epoch, til_epoch = epoch() - relativedelta(days=7), epoch()
+        elif std_prd_str == 'next7':
+            from_epoch, til_epoch = epoch(), epoch() + relativedelta(days=7)
+        elif std_prd_str == 'more_than_30':
+            from_epoch, til_epoch = epoch() + relativedelta(days=30), None
+        elif std_prd_str == 'more_than_last_90':
+            from_epoch, til_epoch = None, epoch() - relativedelta(days=90)
+        elif std_prd_str == 'from_today':
+            from_epoch, til_epoch = epoch(), None
+        elif std_prd_str == 'PAST':
+            yest_now = epoch(today.as_datetime() - timedelta(days=1))
+            yesterdays_value = get_eod(yest_now)
+            if fmt == "xldate":
+                yesterdays_value = yesterdays_value.as_xldate()
+            elif fmt == 'epoch':
+                yesterdays_value = yesterdays_value.as_epoch()
+            elif fmt == 'string':
+                yesterdays_value = yesterdays_value.as_datetime().strftime("%Y-%m-%d")
+            past_tuple = (None, yesterdays_value)
+            PRD_STR_CACHE[sec_context.name, std_prd_str, fmt] = past_tuple
+            return past_tuple
+
+        elif std_prd_str == 'DYNAMIC_WEEK':
+            cur_week_days = ['Sunday', 'Monday', 'Tuesday']
+            dt = today.as_datetime()
+            day_of_week = dt.strftime("%A")
+            target_week_status = ['f']
+            if day_of_week in cur_week_days:
+                target_week_status.append('c')
+
+            from config.periods_config import PeriodsConfig
+            from infra.read import render_period
+            periodconfig = PeriodsConfig()
+            current_p = current_period().mnemonic
+            quarter_week_range =  weekly_periods(current_p)
+            now_dt = today.as_datetime()
+            begin_timestamps = []
+
+            for week_range in quarter_week_range:
+                week_info = render_period(week_range, now_dt, periodconfig)
+                if week_info['relative_period'] in target_week_status:
+                    begin_timestamps.append(week_info['begin'])
+
+            from_epoch = epoch(min(begin_timestamps))
+            til_epoch = None
+
+        else:
+            PRD_STR_CACHE[sec_context.name, std_prd_str, fmt] = (None, None)
+            return None, None
+
+        if fmt == 'epoch':
+            ret_val = (from_epoch.as_epoch() if from_epoch else None,
+                       til_epoch.as_epoch() if til_epoch else None)
+        elif fmt == 'xldate':
+            ret_val = (from_epoch.as_xldate() if from_epoch else None,
+                       til_epoch.as_xldate() if til_epoch else None)
+        elif fmt == 'string':
+            ret_val = (from_epoch.as_datetime().strftime("%Y-%m-%d") if from_epoch else None,
+                       til_epoch.as_datetime().strftime("%Y-%m-%d") if til_epoch else None)
+        if std_prd_str in ['SELECTED_Q', 'SELECTED_NEXT']:
+            return ret_val
+        PRD_STR_CACHE[sec_context.name, std_prd_str, fmt] = ret_val
+        return ret_val
