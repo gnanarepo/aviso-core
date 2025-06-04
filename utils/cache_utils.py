@@ -78,7 +78,7 @@ def put_into_cache(key, value, group, totalsize=-1, chunker=None, exp_time=None,
                 chunk_keys.append(chunk_key)
             cache_con.cache.set(grp, {'__chunks__': chunk_keys, 'version': version}, time=exp_time)
         except Exception as e:
-            logger.warn('failed cache set with chunker: %s', str(e))
+            logger.warning('failed cache set with chunker: %s', str(e))
 
 
 def get_from_cache(key, group, chunker=None, raw_key=None, get_version=False):
@@ -97,7 +97,7 @@ def get_from_cache(key, group, chunker=None, raw_key=None, get_version=False):
             chunks = [cache_con.cache.get(chunk_key) for chunk_key in result['__chunks__']]
             value = chunker.dechunk(chunks)
         except Exception as e:
-            logger.warn('failed to dechunk: %s, callstack: %s', str(e), stack())
+            logger.warning('failed to dechunk: %s, callstack: %s', str(e), stack())
             value = None
 
         if get_version:
@@ -109,7 +109,7 @@ def get_from_cache(key, group, chunker=None, raw_key=None, get_version=False):
             try:
                 value, version = result
             except Exception as e:
-                logger.warn('failed to get cache version: %s, callstack %s', str(e), stack())
+                logger.warning('failed to get cache version: %s, callstack %s', str(e), stack())
                 value, version = None, 0
         else:
             value, version = None, 0
@@ -259,7 +259,7 @@ def memcacheable(cache_name, *cacheargs, **cache_kwargs):
                     val = encoder.decode(val)
                 except Exception as e:
                     #  TEMP: trying to figure out whats going on in memcached
-                    logger.warn('failed to decode error: %s, with kwargs: %s', str(e), cache_kwargs)
+                    logger.warning('failed to decode error: %s, with kwargs: %s', str(e), cache_kwargs)
                     val = func(*args, **kwargs)
             return val
 

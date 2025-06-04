@@ -5,11 +5,10 @@ from datetime import datetime, timedelta
 from itertools import chain
 
 import pytz
-# Third part library imports
-# TODO: Replace this with new library for Infra repo
-from aviso.settings import sec_context
+from aviso.settings import sec_context, CNAME
 
-from .cache_utils import memcached
+from domainmodel.csv_data import CSVDataClass
+from .cache_utils import memcached, memcacheable
 from .relativedelta import relativedelta
 
 xl2datetime = lambda xl_dt: EpochClass.from_xldate(xl_dt).as_datetime()
@@ -18,6 +17,12 @@ datetime2epoch = lambda dt: EpochClass.from_datetime(dt).as_epoch()
 excelBase = datetime(1899, 12, 30, 0, 0, 0)
 epoch2datetime = lambda ep: EpochClass.from_epoch(ep).as_datetime()
 base_epoch = datetime(1970, 1, 1, tzinfo=pytz.utc)
+epoch2xl = lambda ep: EpochClass.from_epoch(ep).as_xldate()
+datestr2xldate = lambda closedDate: EpochClass.from_string(cleanmmddyy(closedDate),
+                                                           '%m/%d/%Y',
+                                                           timezone='tenant').as_xldate()
+BOOKINGS_CACHE_TYPE, BOOKINGS_CACHE_SUFFIX = 'fcst_cache', 'bookings'
+
 period = collections.namedtuple("period", ["mnemonic", "begin", "end"])
 onems = timedelta(milliseconds=1)
 
@@ -912,6 +917,113 @@ def get_weekly_periods_info_in_quarter(q_mnemonic, today_epoch):
 
     return weekly_period_info
 
+def is_demo():
+    tc = sec_context.details.get_config(category='forecast',
+                                        config_name='tenant')
+    return tc.get('is_demo', CNAME not in ['app', 'stage'])
+
+def get_now(verbose=False,):
+    """ Computes the EpochClass object referring to 'now' for the tenant. If in demo mode
+    (meaning that the tenant is 'frozen' and not expected to be refreshed regularly, we treat last
+    refresh time as 'now'.
+
+    If verbose, returns a tuple (now, latest_refresh_date, avail_prds)
+    If not, just returns now.
+    """
+
+    if not verbose and not is_demo():
+        return epoch()
+    tc = sec_context.details.get_config(category='forecast', config_name='tenant')
+    BookingsCacheClass = CSVDataClass(BOOKINGS_CACHE_TYPE,
+                                      BOOKINGS_CACHE_SUFFIX)
+
+    top_lvl_recs = list(BookingsCacheClass.getAllByFieldValue(
+            'V', u'.~::~summary'))
+    is_chipotle = tc.get('fm_config', {}).get('rtfm_type', 'standard') == "chipotle"
+
+    if not top_lvl_recs:
+        return None
+
+    avail_prds = {record.Q for record in top_lvl_recs}
+    latest_refresh_date = None
+    if is_chipotle:
+        try:
+            latest_refresh_date = int(sec_context.details.get_flag('molecule_status',
+                                                                   'rtfm', {}).get('last_execution_time'))
+        except (TypeError, ValueError):
+            pass
+
+    if not latest_refresh_date:
+        try:
+            latest_refresh_date = max(top_lvl_recs, key=lambda x: x.Q).dynamic_fields['as_of'][-1]
+        except Exception as e:
+            logger.exception(e.message)
+    if is_demo() and latest_refresh_date:
+        now = epoch(latest_refresh_date)
+    else:
+        now = epoch()
+
+    if not verbose:
+        return now
+    else:
+        curr_mnem =  current_period(epoch(latest_refresh_date).as_datetime()).mnemonic
+        avail_prds |= set(period_info_from_mnem(curr_mnem, has_nextq=True))
+        return now, latest_refresh_date, avail_prds
+
+@memcacheable('period_info_from_mnem', ('mnem', 0), ('monthly', 1), ('has_nextq', 2), ('as_of', 3))
+def period_info_from_mnem(mnem, monthly=False, has_nextq=False, as_of=None, use_safe_nextq=False):
+    """
+    return info about a period from the mnemonic
+    """
+    prd_infos = collections.defaultdict(lambda: collections.defaultdict(list))
+    if as_of:
+        as_of = epoch(as_of)
+
+    def add_period(mnem, qtr, beg=None, end=None, is_comp=False, as_of=None):
+        if not beg and not end:
+            beg, end = period_rng_from_mnem(mnem)
+        beg = epoch(beg)
+        end = epoch(end)
+        prd_infos[mnem].update({'qtr': qtr,
+                                'begin': beg.as_xldate(),
+                                'end': end.as_xldate(),
+                                'is_comp': is_comp,
+                                })
+        if is_comp:
+            prd_infos[qtr]['comp_list'].append(mnem)
+        if as_of:
+            prd_infos[mnem]['is_hist'] = end < as_of
+
+    add_period(mnem, mnem, is_comp=not monthly)
+
+    if has_nextq:
+        if use_safe_nextq:
+            nextq_mnem = get_nextq_mnem_safe(mnem)
+        else:
+            nextq_mnem = get_nextq_mnem(mnem)
+        add_period(nextq_mnem, nextq_mnem, is_comp=not monthly)
+
+    if monthly:
+        mnem_beg = prd_infos[mnem]['begin']
+        quarterly_months = ([current_period(epoch(mnem_beg).as_datetime(), period_type='M')] +
+                            next_period(epoch(mnem_beg).as_datetime(), period_type='M', count=5))
+        boqs = [(mnem, epoch(mnem_beg), quarterly_months[:3])]
+        if has_nextq:
+            boqs += [(nextq_mnem, epoch(prd_infos[nextq_mnem]['begin']), quarterly_months[3:])]
+        for (mnem, boq, months) in boqs:
+            for p, month in enumerate(months):
+                bom = epoch(month.begin)
+                eom = epoch(month.end)
+                bom_dt = bom.as_datetime()
+                eom_dt = eom.as_datetime()
+                # This is really messed up. The mnemonic that the app uses isn't the same as the mnemonic in the periods.
+                # Current period gives '2019M04' where 2019 is FY, app wants '201804' where 2018 is calendar year.
+                # We use the middle date to figure out the month, since first and last might not work with weird months.
+                mom_dt = bom_dt - (bom_dt - eom_dt) / 2
+                period = str(mom_dt.year) + format(mom_dt.month, '02')
+                add_period(period, mnem, bom_dt, eom_dt, is_comp=True, as_of=as_of)
+    return dict(prd_infos)
+
 def rng_from_prd_str(std_prd_str, fmt='epoch', period_type='Q', user_level=False):
     """Given a standard period string, like thisQ, thisM, nextW, etc
     return the boundaries of that period as a tuple of (begin, end)"""
@@ -919,11 +1031,9 @@ def rng_from_prd_str(std_prd_str, fmt='epoch', period_type='Q', user_level=False
     if user_level:
         from config.periods_config import PeriodsConfig
         periodconfig = PeriodsConfig()
-        from infra.read import get_now
-        today = get_now(periodconfig)
+        from infra.read import get_now as infra_get_now
+        today = infra_get_now(periodconfig)
     else:
-        # TODO: should I import this?
-        from api.app import get_now
         today = get_now()
     try:
         return PRD_STR_CACHE[sec_context.name, std_prd_str, fmt]
@@ -1046,3 +1156,41 @@ def rng_from_prd_str(std_prd_str, fmt='epoch', period_type='Q', user_level=False
             return ret_val
         PRD_STR_CACHE[sec_context.name, std_prd_str, fmt] = ret_val
         return ret_val
+
+def get_a_date_time_as_float_some_how(date_like_thing):
+    if not date_like_thing:
+        return None
+    # Convert modified date from string to an excel float
+    try:
+        a_date = float(date_like_thing)
+        if (a_date > 100000):
+            a_date = EpochClass.from_epoch(a_date).as_xldate()
+    except TypeError:
+        # TODO: Move the type error to the exception list below so that
+        # we will try the fall back mechanism after we see why it is failing
+        # first
+        logger.error(
+            "Unable to determine the date from %s" + str(date_like_thing))
+        logger.error('Type of the argument is %s', str(type(date_like_thing)))
+        return None
+    except (ValueError):
+        try:
+            a_date = datetime2xl(
+                EpochClass.from_string(cleanmmddyy(date_like_thing), '%m/%d/%Y').as_datetime())
+        except:
+            logger.error(
+                "Unable to determine the date from " + date_like_thing)
+            return None
+
+    return a_date
+
+def cleanmmddyy(anstr):
+    a = anstr.split('/')
+    if len(a) != 3:
+        return anstr
+    year = int(a[2])
+    if year < 70:
+        year += 2000
+    return str(int(a[0])) + '/' + str(int(a[1])) + '/' + str(year)
+
+datetime2xl = lambda dt: EpochClass.from_datetime(dt).as_xldate()

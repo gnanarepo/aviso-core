@@ -888,7 +888,7 @@ class DealConfig(BaseConfig):
             self.config, ["owner_id_fields"], default_owner_id_fields
         )
         if isinstance(owner_id_fields, dict):
-            logger.warn(
+            logger.warning(
                 "using old config format for owner_id_fields please switch")
             owner_id_fields = [(k, v) for k, v in owner_id_fields.items()]
         return owner_id_fields
@@ -6802,11 +6802,11 @@ class FMConfig(BaseConfig):
             ordered_fields = top_sort(fields, ['source'])
         except UndefinedError as e:
             msg = 'undefined dependent for field: {}, dep: {}, config: {}'.format(e[0], e[1], fields)
-            logger.warn(msg)
+            logger.warning(msg)
             return False, msg
         except CycleError as e:
             msg = 'cycle detected on field: {}, config: {}'.format(e, fields)
-            logger.warn(msg)
+            logger.warning(msg)
             return False, msg
 
         validators = {'UE': self._validate_user_entered_field,
@@ -6823,15 +6823,15 @@ class FMConfig(BaseConfig):
             try:
                 validators[fields[field]['type']](field, fields)
             except AssertionError as e:
-                logger.warn(e)
+                logger.warning(e)
                 return False, e.message
             except KeyError:
                 msg = 'invalid field type on field: {}, config: {}'.format(field, fields[field])
-                logger.warn(msg)
+                logger.warning(msg)
                 return False, msg
             except FilterError:
                 msg = 'invalid filter on field: {}, config: {}'.format(field, fields[field])
-                logger.warn(msg)
+                logger.warning(msg)
                 return False, msg
 
         return True, ''

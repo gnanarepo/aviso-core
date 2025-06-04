@@ -1,7 +1,17 @@
+from datetime import datetime
+from itertools import chain, combinations
+
 from aviso.settings import sec_context
-from operator import lt, gt, le, ge
+from operator import lt, gt, le, ge, itemgetter
 
 range_lambdas = {}
+
+CURR_TABLE = {'USD':'$', 'CAD': '$', 'GBP':u'\xa3','JPY':u'\xa5',
+              'CNY': u'\xa5', 'EUR':u'\u20ac','INR':u'\u20b9','KRW':u'\u20a9','RAND':'R'
+            }
+
+MONTH_NAMES = ['January', 'Feburary', 'March', 'April', 'May', 'June',
+               'July', 'August', 'September', 'October', 'November', 'December']
 
 class CycleError(Exception):
     pass
@@ -56,6 +66,100 @@ def pop_nested(input_dict, nesting, default=None):
     for level in nesting[:-1]:
         input_dict = input_dict.get(level, {})
     return input_dict.pop(nesting[-1], default)
+
+def try_int(x, default=None):
+    try:
+        return int(x)
+    except:
+        return default
+
+def powerset(iterable):
+    """ Given an iterable, return a new iterable of all subsets."""
+    xs = list(iterable)
+    return chain.from_iterable(combinations(xs, n)
+                               for n in range(len(xs) + 1))
+
+def trimsort(iterable, distinct, key=None):
+    """
+    sort an iterable by key, and keep only the first unique item by distinct
+    iterable = [{'a': 1, 'b': 2}, {'a': 1, 'b': 3}, {'a': 2, 'b': 4}, {'b': 5}]
+    trimsort(iterable, 'a') --> [{'a': 1, 'b': 2}, {'a': 2, 'b': 4}]
+    """
+    sorted_iter = sorted(iterable, key=key)
+    seen = set()
+    for item in sorted_iter:
+        try:
+            distinct_val = itemgetter(distinct)(item)
+        except (KeyError, IndexError):
+            continue
+        if distinct_val not in seen:
+            yield item
+        seen.add(distinct_val)
+
+def format_val(val, fmt, c=None, ep_cache=None):
+    """Format a value for display according to our standard conventions."""
+
+    c = sec_context.details.get_config(category='forecast', config_name='tenant').get(
+        'default_cur_format', 'USD')
+
+    if fmt == 'amount':
+        val = try_float(val)
+        abs_val = abs(val)
+        curr = CURR_TABLE.get(c, '$')
+        neg_prefix = u'-' if val != abs_val else u''
+        for (exp, letter) in [(9, 'B'), (6, 'M'), (3, 'K')]:
+            if abs_val >= 10 ** exp:
+                return neg_prefix + u'{}{:0,.1f}{}'.format(curr, abs_val / 10 ** exp, letter)
+        else:
+            return neg_prefix + u'{}{:0,.1f}'.format(curr, abs_val)
+    elif fmt == 'longAmount':
+        val = try_int(val)
+        abs_val = abs(val)
+        curr = CURR_TABLE.get(c, '$')
+        neg_prefix = u'-' if val != abs_val else u''
+        return neg_prefix + u'{}{:,}'.format(curr, val)
+    elif fmt == 'excelDate':
+        try:
+            try:
+                return ep_cache[val]
+            except:
+                from utils.date_utils import epoch
+                ret_val = datetime.strftime(epoch(try_float(val, 'N/A')).as_datetime(), '%b %d')
+                if ep_cache is not None:
+                    ep_cache[val] = ret_val
+                return ret_val
+        except:
+            return 'N/A'
+    elif fmt == 'stringDate':
+        try:
+            from utils.date_utils import epoch
+            return datetime.strftime(epoch(val).as_datetime(), '%Y-%m-%d')
+        except:
+            return 'N/A'
+    elif fmt == 'none':
+        return val
+    elif fmt == 'calMonth':
+        yyyy, mm = val[:4], int(val[4:])
+        return '{month} {year}'.format(month=MONTH_NAMES[mm-1], year=yyyy)
+    elif fmt == 'yyyymmdd':
+        try:
+            yyyy, mm, dd = int(val[:4]), int(val[4:6]), int(val[6:8])
+            return '{month}/{day}/{year}'.format(month=mm,
+                                                 day=dd,
+                                                 year=yyyy)
+        except:
+            return 'N/A'
+    elif fmt == 'percentage':
+        val = try_float(val) * 100
+        abs_val = abs(val)
+        neg_prefix = '-' if val != abs_val else ''
+        new_val = neg_prefix + '{:0,.2f}'.format(abs_val)
+        return str(new_val) + "%"
+    elif fmt == 'count':
+        if val==None: val=0
+        return int(val)
+    else:
+        return "'%s'" % val
 
 
 def try_float(maybe_float, default=0.0):

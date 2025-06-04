@@ -39,7 +39,7 @@ def construct_child_nodes(parent, name, dd_flds, is_rep=False):
                 yield '~::~'.join(['~'.join(next(child_front) for x in range(level)),
                                    '~'.join(next(child_back) for x in range(level))])
     except IndexError:
-        logger.warn('scary node being added, parent: %s, name: %s', parent, name)
+        logger.warning('scary node being added, parent: %s, name: %s', parent, name)
         yield '~::~'.join([parent, name])
 
 
@@ -64,7 +64,7 @@ def get_hierarchy_fields():
     from domainmodel.datameta import Dataset, UIPIterator
     ds = Dataset.getByNameAndStage('CustomUserDS')
     if not ds:
-        logger.warn('no CustomUserDS found, using default fields')
+        logger.warning('no CustomUserDS found, using default fields')
         return ['Level_0', 'Level_1', 'frozen_Owner']
     for idx, record in enumerate(UIPIterator(ds, {}, None)):
         if idx >= 1:
@@ -177,7 +177,7 @@ def hier_switch(node, replacement, begin, end, length):
         back = end.join([replacement] + back_parts[length:])
         return begin.join([front, back])
     except Exception as e:
-        logger.warn(e)
+        logger.warning(e)
         return None
 
 
@@ -381,7 +381,7 @@ def make_display_name(node, display_mappings):
         full_name = '~'.join(mapped_segs)
         display_name = mapped_segs[-1]
     except ValueError:
-        logger.warn('messed up node: %s', node)
+        logger.warning('messed up node: %s', node)
         seg, segtype, full_name, display_name = node, node, node, node
     return NodeName(seg, segtype, full_name, display_name)
 
@@ -396,7 +396,7 @@ def get_wrd():
     try:
         return Dataset.getByNameAndStage(name='OppDS').params['general']['weekly_report_dimensions']
     except Exception as e:
-        logger.warn(e)
+        logger.warning(e)
         return ['frozen_Level_0~frozen_Level_1~frozen_Owner']
 
 
@@ -452,7 +452,7 @@ def move_permissions(node_mapping, debug=False):
         try:
             old_nodes = get_user_permissions(u, 'results')
         except Exception as e:
-            logger.warn('bad user record: %s', u)
+            logger.warning('bad user record: %s', u)
             old_nodes = []
         for old_node in old_nodes:
             if old_node in node_mapping:

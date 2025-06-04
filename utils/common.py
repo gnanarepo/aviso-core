@@ -1,3 +1,5 @@
+import netaddr
+
 class weekday:
     __slots__ = ["weekday", "n"]
 
@@ -49,3 +51,15 @@ class cached_property:
             return self
         res = instance.__dict__[self.func.__name__] = self.func(instance)
         return res
+
+def ip_match(ip, valid_ip_list):
+    ip = ip.strip()
+    ip = netaddr.IPAddress(ip)
+    for n in valid_ip_list:
+        if '/' in n:
+            nw = netaddr.IPNetwork(n)
+        else:
+            nw = netaddr.IPNetwork(n+'/32')
+        if ip in nw:
+            return n
+    return None

@@ -3,15 +3,14 @@ from copy import deepcopy
 
 # TODO: Replace this with the new Library import for Infra
 # Reach out ot Waqas or Kuldeep for details.
-from aviso.settings import sec_context 
+from aviso.settings import sec_context
 
-
+from infra import AUDIT_COLL
 from utils.date_utils import epoch
 
 # TODO: Do we still need to support the backup and email?
 # from api.tenantmanager import backup_and_mail_changes
 
-AUDIT_COLL = 'audit_log'
 from utils.common import cached_property
 
 logger = logging.getLogger('gnana.%s' % __name__)

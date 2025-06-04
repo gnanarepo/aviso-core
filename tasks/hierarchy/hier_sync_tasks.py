@@ -116,7 +116,7 @@ class _Sync:
 
     def persist(self):
         if not self.new_node_to_parent:
-            logger.warn('no hierarchy records persisted')
+            logger.warning('no hierarchy records persisted')
             self.return_value = {'success': False, 'error': 'no hierarchy'}
             return
 
@@ -231,7 +231,7 @@ class _Bootstrap:
                     self.period,
                     try_index(self.new_node_to_parent.items(), 0))
         if not self.new_node_to_parent:
-            logger.warn('no hierarchy records persisted')
+            logger.warning('no hierarchy records persisted')
             self.return_value = {'success': False, 'error': 'no hierarchy'}
             return
 

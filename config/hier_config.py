@@ -24,7 +24,7 @@ from .periods_config import PeriodsConfig
 logger = logging.getLogger('gnana.%s' % __name__)
 
 
-class DealFactory():
+class DealFactory:
     def __init__(self, timestamp, period_infos, owner_ids, dd_owner_ids, seed=None):
         random.seed(seed)
         np.random.seed(seed)
@@ -651,7 +651,7 @@ def get_distinct_deal_field_values(period, deal_fields, deal_count=None, seed=No
                                     for vals in product(*[woot[field] for field in deal_fields])]}
 
 
-class HierarchyBuilder(object):
+class HierarchyBuilder:
     """
     base class for hierarchy builders
     need to adhere to contract of having build_hierarchy method
@@ -1419,7 +1419,7 @@ def write_hierarchy_to_gbm(config,
     try:
         sec_context.gbm.api('/gbm/hier_sync', hier_records)
     except Exception as e:
-        logger.warn(e.message)
+        logger.warning(e.message)
         return False
 
     return True
