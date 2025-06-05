@@ -316,7 +316,7 @@ class Model:
                 return self
 
             def replace_one(self, doc):
-                if (doc['object'][self.id_field] in self.find_objs):
+                if doc['object'][self.id_field] in self.find_objs:
                     saved_rec = self.find_objs.pop(doc['object'][self.id_field])
                     doc['_id'] = saved_rec['_id']
                     self._replace(doc)
@@ -538,7 +538,7 @@ class Model:
                             all_query_fields_old
                         )
                 except Exception as e:
-                    logger.exception("Got Exception while saving index info %s" % (e.message))
+                    logger.exception(f"Got Exception while saving index info: {e}")
 
     @classmethod
     def getCollectionName(cls):
@@ -548,7 +548,7 @@ class Model:
         .. Warning:: Do not cache this value, as it will change based on
             the context.
         """
-        if (cls.tenant_aware):
+        if cls.tenant_aware:
             return sec_context.name + "." + cls.collection_name
         else:
             return cls.collection_name
@@ -578,7 +578,7 @@ class Model:
                                           check_unique,
                                           read_from_primary=cls.read_from_primary,
                                           tenant_aware=cls.tenant_aware)
-        if (attrs):
+        if attrs:
             return cls(attrs)
         else:
             return None
@@ -625,7 +625,7 @@ class Model:
             TODO: Refactor this - use getBySpecifiedCriteria once the tests pass
         """
         try:
-            if (getattr(cls, "postgres", None)):
+            if getattr(cls, "postgres", None):
                 my_iter = gnana_db2.findAllDocuments(cls.getCollectionName(),
                                                      {'object.' + field: sec_context.encrypt(value)
                                                       if cls.tenant_aware and cls.encrypted else value})
@@ -714,7 +714,7 @@ class Model:
     def remove(cls, objid):
         """Remove the object from the database
         """
-        if (objid):
+        if objid:
             if getattr(cls, "postgres", None):
                 gnana_db2.removeDocument(cls.getCollectionName(), objid)
             else:
@@ -774,8 +774,8 @@ class Model:
                     for attrs in my_iter:
                         yield cls(attrs)
             except Exception as e:
-                logger.exception(e.message)
-                raise (e)
+                logger.exception(e)
+                raise e
 
     @classmethod
     def get_count(cls, criteria=None):

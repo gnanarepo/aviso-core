@@ -8,7 +8,7 @@ import threading
 import time
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 
 import celery
 from _collections import defaultdict
@@ -27,6 +27,7 @@ from tasks import asynctasks
 from utils import date_utils, file_utils, memory_usage_resource
 
 logger = logging.getLogger('gnana.%s' % __name__)
+
 task_statuses = {
     0: 'Created',
     1: 'Started',
@@ -47,7 +48,7 @@ def celery_task_handler(tasks, cleanup, kill_siblings_on_fail=False, d=0):
         result = Task.getAll(criteria)
         for t in result:
             res = AsyncResult(t.extid)
-            if(res.state not in ['SUCCESS', 'FAILURE']):
+            if res.state not in ['SUCCESS', 'FAILURE']:
                 t.status = Task.STATUS_ERROR
                 t.save(is_partial=True, field_list=['object.status'])
                 t.current_status_msg = 'terminated'
@@ -160,7 +161,7 @@ def gnana_task_support(f):
     def heartbeat_main(task, task_db, heartbeat_stop_event):
         #sec_context.set_context('gbm', task.tenant, 'administrative.domain', 'gbm', 'tenant', {})
         tracer.trace = task.trace
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
         last_time = start_time
 
         while task.status == Task.STATUS_STARTED and not heartbeat_stop_event.is_set():
@@ -169,13 +170,13 @@ def gnana_task_support(f):
                 if not heartbeat_stop_event.is_set():
                     task_db.heartbeat(task)
             except Exception:
-                logger.warn("Unable to save task heartbeat.", exc_info=True)
+                logger.warning("Unable to save task heartbeat.", exc_info=True)
 
             hb_metrics = logger.new_metrics()
-            hb_metrics.set_timer("task.elapsed_time", (datetime.utcnow() - start_time).total_seconds() * 1000)
-            hb_metrics.set_timer("task.heartbeat_time", (datetime.utcnow() - last_time).total_seconds() * 1000)
+            hb_metrics.set_timer("task.elapsed_time", (datetime.now(UTC) - start_time).total_seconds() * 1000)
+            hb_metrics.set_timer("task.heartbeat_time", (datetime.now(UTC) - last_time).total_seconds() * 1000)
             logger.metrics("Task Heartbeat " + task.extid, metrics=hb_metrics)
-            last_time = datetime.utcnow()
+            last_time = datetime.now(UTC)
 
     def new_task(user_and_tenant, *args, **options):
         thread_local_tags.tags = {}
@@ -239,7 +240,7 @@ def gnana_task_support(f):
                 name = t.type
             logger.info(
                 "Begin execution of Task %s[%s]", name, celery_id)
-            if(t):
+            if t:
                 logger.set_common_tags({'task.id': t.extid, 'task.name': t.type})
 
                 if t.tenant != tenantname:
@@ -378,7 +379,7 @@ def gnana_task_support(f):
             if t is not None:
                 t.stop_time = date_utils.now()
                 exc_type, exc_value, exc_traceback = sys.exc_info()
-                err_msg = "TASK EXCEPTION:  " + str(ex.message) + " "  + str(traceback.format_exception(exc_type, exc_value, exc_traceback))
+                err_msg = "TASK EXCEPTION:  " + str(ex) + " "  + str(traceback.format_exception(exc_type, exc_value, exc_traceback))
 
                 t.current_status_msg = err_msg
                 t.status = Task.STATUS_ERROR
@@ -447,7 +448,7 @@ def gnana_task_support(f):
                 task_metrics.set_counter("task.cpu", cpu_perc)
                 task_metrics.set_counter("task.retries", t.retry_count or 0)
                 task_metrics.set_timer("task.wait_time",
-                                       (datetime.utcnow() - t.created_datetime).total_seconds() * 1000)
+                                       (datetime.now(UTC) - t.created_datetime).total_seconds() * 1000)
 
                 logger.metrics("Task Executed {0}".format(celery_id), metrics=task_metrics)
 
@@ -465,9 +466,9 @@ def get_stats(start_time, end_time, starting_cpu_times, end_cpu_times):
     time_taken = end_time - start_time
     psys_time = end_cpu_times.system - starting_cpu_times.system
     puser_time = end_cpu_times.user - starting_cpu_times.user
-    cpu_perc = ((psys_time + puser_time)/(time_taken))*100
+    cpu_perc = ((psys_time + puser_time) / time_taken) * 100
     memory_use = memory_usage_resource()
-    return (memory_use, cpu_perc, time_taken)
+    return memory_use, cpu_perc, time_taken
 
 
 """
@@ -566,12 +567,12 @@ def revokejobs_streaming(criteria, cleanup=False, reset_chipotle_trace=False):
             else:
                 tasklist[task['object']['tenant']][task['object']['framework_version']] = [task_details]
         progress = 0
-        for tenant, framework_versions in tasklist.iteritems():
+        for tenant, framework_versions in tasklist.items():
             user_name = 'revoke'
             logintenant = 'administrative.domain'
             sec_context.set_context(user_name, tenant, logintenant, user_name, 'tenant', {})
             trace_list = []
-            for version, total_tasks in framework_versions.iteritems():
+            for version, total_tasks in framework_versions.items():
                 if msg:
                     msg += ' and '
                 msg += str(len(total_tasks)) + " v" + version + "_tasks"
@@ -642,7 +643,7 @@ def revokejobs_streaming(criteria, cleanup=False, reset_chipotle_trace=False):
             logger.info(msg)
         yield '],"success":%s%s}' % (success, status)
     except Exception as e:
-        logger.exception(e.message)
+        logger.exception(e)
 
 
 def check_and_log_progress(tasks_revoked, total_task_count, progress):

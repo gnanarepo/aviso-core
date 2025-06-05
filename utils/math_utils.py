@@ -7,7 +7,7 @@ def excelToFloat(x):
         else:
             xstr = x.__str__()
 
-        if (xstr.strip().__len__() == 0): return 0;
+        if xstr.strip().__len__() == 0: return 0;
         xm = xstr.replace('$', '')
         x0 = xm.replace('(', '-')
         x1 = x0.strip(')')

@@ -36,7 +36,7 @@ def config_pattern_expansion(attrs):
 
     def checkpattern(attrs, i, path, i_type, in_and_ex):
         if isinstance(i, str):
-            if ((i.startswith("$(") or i.startswith("${") or i.startswith("$[")) and i.find('/') >= 2):
+            if i.startswith(("$(", "${", "$[")) and '/' in i[2:]:
                 pattern_type = i[1:2]
                 category_key, config_name = i[2:-1].split("/")
                 pattern_value = None

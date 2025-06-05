@@ -1,10 +1,12 @@
 import logging
 
 from config import HierConfig
-from config.hier_config import HIERARCHY_BUILDERS
+from config.hier_config import HIERARCHY_BUILDERS, write_hierarchy_to_gbm
 from infra.read import (fetch_hidden_nodes,
                         fetch_node_to_parent_mapping_and_labels,
-                        get_period_as_of)
+                        get_period_as_of, get_period_begin_end)
+from tasks.hierarchy import (draw_tree, graft_pruned_tree, make_new_hierarchy,
+                             make_pruned_tree, make_valid_tree)
 from utils.misc_utils import is_lead_service, try_index
 from utils.mongo_writer import (create_many_nodes, create_node, hide_node,
                                 label_node, move_node, unhide_node)
@@ -22,9 +24,9 @@ class HierSyncTask:
             result = sync_obj.return_value
             return {'success': True, 'result': result}
         except Exception as e:
-            logger.exception(e.message)
+            logger.exception(e)
             return {'success': False,
-                    'error_msg': e.message}
+                    'error_msg': e}
 
 
 class Sync:

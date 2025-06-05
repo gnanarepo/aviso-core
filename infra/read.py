@@ -455,7 +455,7 @@ def get_quarter_period(period):
             quarters = [period + 'Q' + str(x) for x in range(1, 5)]
             return quarters
         else:
-            for quarter, months in available_periods.iteritems():
+            for quarter, months in available_periods.items():
                 if period in months:
                     return quarter
 
@@ -551,7 +551,7 @@ def get_crr_period_and_monthly_period(period, is_dlf=False):
                 quarter_months = available_periods.get(quarter) or []
                 period_and_monthly_period.append((quarter, quarter_months))
         else:
-            for quarter, months in available_periods.iteritems():
+            for quarter, months in available_periods.items():
                 if period in months:
                     return quarter, [period]
     return period_and_monthly_period
@@ -1242,7 +1242,7 @@ def get_current_month(config):
     now_dt = get_now(config).as_datetime()
     curr_mnem = current_period(now_dt).mnemonic
     for month in monthly_periods(curr_mnem):
-        if now_dt >= month.begin and now_dt <= month.end:
+        if month.begin <= now_dt <= month.end:
             return month
 
     return now_dt
@@ -1251,7 +1251,7 @@ def get_current_week(config):
     now_dt = get_now(config).as_datetime()
     curr_mnem = current_period(now_dt).mnemonic
     for week in weekly_periods(curr_mnem):
-        if now_dt >= week.begin and now_dt <= week.end:
+        if week.begin <= now_dt <= week.end:
             return week
 
     return now_dt
@@ -1262,7 +1262,7 @@ def get_current_weeks(period):
     curr_mnem = current_period(peirod_begin).mnemonic
     weeks = []
     for week in weekly_periods(curr_mnem):
-        if week.begin >= peirod_begin and week.begin <= period_end:
+        if peirod_begin <= week.begin <= period_end:
             weeks.append(week)
     return weeks
 
@@ -1568,11 +1568,11 @@ def fetch_eligible_nodes_for_segment(as_of,
                                     db=None,
                                     period=None,
                                     boundary_dates=None):
-    '''
+    """
     fetches the nodes which are eligible for given segment
 
     returns nodes which are eligible
-    '''
+    """
     coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
     hier_collection = db[coll] if db else sec_context.tenant_db[coll]
     hier_collection.ensure_index([('normal_segs', -1), ('from', -1), ('to', -1)])
@@ -1595,11 +1595,11 @@ def fetch_eligible_nodes_for_segment_versioned(as_of,
                                             db=None,
                                             period=None,
                                             boundary_dates = None):
-    '''
+    """
     fetches the nodes which are eligible for given segment
 
     returns nodes which are eligible
-    '''
+    """
     coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
     hier_collection = db[coll] if db else sec_context.tenant_db[coll]
     hier_collection.ensure_index([('normal_segs', -1), ('from', -1), ('to', -1)])
@@ -3247,7 +3247,7 @@ def fetch_ancestor_ids(as_of,
         node_criteria = {'node': {'$in': list(nodes)}}
         match = merge_dicts(criteria, node_criteria)
     else:
-        match = {k: v for k, v in criteria.iteritems()}
+        match = {k: v for k, v in criteria.items()}
 
     if signature:
         match['how'] = signature
@@ -3361,7 +3361,7 @@ def fetch_ancestor_ids_versioned(as_of,
         node_criteria = {'node': {'$in': list(nodes)}}
         match = merge_dicts(criteria, node_criteria)
     else:
-        match = {k: v for k, v in criteria.iteritems()}
+        match = {k: v for k, v in criteria.items()}
 
     if signature:
         match['how'] = signature
@@ -4254,7 +4254,7 @@ def fetch_closest_boundaries(as_of,
             closest_next_to_timestamp
 
     except Exception as e:
-        logger.error("Failed to fetch from and to boundaries of hierarchy for the given as_of: %s" %(e))
+        logger.error(f"Failed to fetch from and to boundaries of hierarchy for the given as_of: {e}")
 
     return None, None, None, None
 
@@ -4296,7 +4296,7 @@ def fetch_boundry(as_of,
         return closest_prev_from_timestamp, closest_prev_to_timestamp
 
     except Exception as e:
-        logger.error("Failed to fetch the boundry for given as_of: %s" %(e))
+        logger.error(f"Failed to fetch the boundry for given as_of: {e}")
 
     return as_of, None
 
@@ -4372,9 +4372,9 @@ class NodeDoesntExistError(Exception):
 
 # TODO: change implementation by giving level as 20
 def fetch_leaves_of_node(node, period=None):
-    '''
+    """
     Note: Not efficient. Just using till a better implementaion comes along
-    '''
+    """
     parents = {node}
     period = period if period else get_current_period()
     as_of = get_period_as_of(period)
@@ -4842,7 +4842,7 @@ def fetch_deal_totals(period_and_close_periods,
     if return_seg_info:
         for res in aggs:
             val = {}
-            for k, v in res.iteritems():
+            for k, v in res.items():
                 if k != '_id':
                     val[k] = v
                     if k not in aggregated_val:
@@ -4855,7 +4855,7 @@ def fetch_deal_totals(period_and_close_periods,
         return cache
     else:
         try:
-            val = {k: v for k, v in aggs[0].iteritems() if k != '_id'}
+            val = {k: v for k, v in aggs[0].items() if k != '_id'}
         except IndexError:
             val = {label: 0 for label, _, _ in fields_and_operations}
             val['count'] = 0
@@ -5007,7 +5007,7 @@ def fetch_crr_deal_rollup(period_and_close_periods,
             if not hier_aware:
                 if node != drilldown:
                     continue
-            for k, v in res.iteritems():
+            for k, v in res.items():
                 if k != '_id':
                     if hier_aware:
                         if k.endswith(node.replace('.', '$')):
@@ -5328,13 +5328,13 @@ def fetch_deal_rollup_dlf_using_df(period_and_close_periods,
                         filter_val = get_nested(record, filter_field_project_hierarchy + filter_field_match_hierarchy)
 
                     if filter_val in filter_field_values:
-                        node_frame_by_state = {}
-                        node_frame_by_state['amount'] = get_nested_with_placeholder(record, amount_field_hierarchy,
-                                                                                    {'node': dlf_node})
-                        node_frame_by_state['amount'] = node_frame_by_state['amount'].get(dlf_node, 0) if isinstance(
-                            node_frame_by_state['amount'], dict) else node_frame_by_state['amount']
-                        node_frame_by_state['node'] = dlf_node
-                        node_frame_by_state['count'] = 1
+                        amount_data = get_nested_with_placeholder(record, amount_field_hierarchy, {'node': dlf_node})
+
+                        node_frame_by_state = {
+                            'amount': amount_data.get(dlf_node, 0) if isinstance(amount_data, dict) else amount_data,
+                            'node': dlf_node,
+                            'count': 1
+                        }
 
                         if projected_seg_field is not None:
                             node_frame_by_state['segment'] = record[projected_seg_field]
@@ -5544,7 +5544,7 @@ def fetch_crr_deal_rollup_dlf(period_and_close_periods,
                 drilldown = res['_id'].get(hier_field, None)
             if node != drilldown:
                 continue
-            for k, v in res.iteritems():
+            for k, v in res.items():
                 if k != '_id':
                     if hier_aware:
                         if k.endswith(node.replace('.', '$')):
@@ -5864,7 +5864,7 @@ def fetch_deal_rollup_dlf(period_and_close_periods,
                     drilldown = res['_id'].get(hier_field, None)
                 if node != drilldown:
                     continue
-                for k, v in res.iteritems():
+                for k, v in res.items():
                     if k != '_id':
                         if hier_aware:
                             if k.endswith(node.replace('.', '$')):
@@ -6170,7 +6170,7 @@ def fetch_deal_rollup(period_and_close_periods,
                 if not hier_aware:
                     if node != drilldown:
                         continue
-                for k, v in res.iteritems():
+                for k, v in res.items():
                     if k != '_id':
                         if hier_aware:
                             if k.endswith(node.replace('.', '$')):
@@ -6354,7 +6354,7 @@ def fetch_many_prnt_DR_deal_totals(period_and_close_periods,
     if return_seg_info:
         for res in aggs:
             val = {}
-            for k, v in res.iteritems():
+            for k, v in res.items():
                 if k != '_id':
                     val[k] = v
                     if k not in aggregated_val:
@@ -6370,7 +6370,7 @@ def fetch_many_prnt_DR_deal_totals(period_and_close_periods,
         for res in aggs:
             try:
                 val = {}
-                for k, v in res.iteritems():
+                for k, v in res.items():
                     if k != '_id':
                         val[k] = v
                 node = res['_id'][hier_field]
@@ -6819,7 +6819,7 @@ def fetch_prnt_DR_deal_totals(period_and_close_periods,
     if return_seg_info:
         for res in aggs:
             val = {}
-            for k, v in res.iteritems():
+            for k, v in res.items():
                 if k != '_id':
                     val[k] = v
                     if k not in aggregated_val:
@@ -6832,7 +6832,7 @@ def fetch_prnt_DR_deal_totals(period_and_close_periods,
         return cache
     else:
         try:
-            val = {k: v for k, v in aggs[0].iteritems() if k != '_id'}
+            val = {k: v for k, v in aggs[0].items() if k != '_id'}
         except IndexError:
             val = {label: 0 for label, _, _ in fields_and_operations}
             val['count'] = 0
@@ -6998,8 +6998,8 @@ def fetch_crr_deal_totals(period_and_close_periods,
     total_aggregated_values = {}
     if return_seg_info:
         for result in aggregated_results:
-            segment_values = {key: value for key, value in result.iteritems() if key != '_id'}
-            for key, value in segment_values.iteritems():
+            segment_values = {key: value for key, value in result.items() if key != '_id'}
+            for key, value in segment_values.items():
                 total_aggregated_values[key] = total_aggregated_values.get(key, 0) + value
             if config.segment_field:
                 cache[(filter_name, result['_id'], node)] = value
@@ -7007,7 +7007,7 @@ def fetch_crr_deal_totals(period_and_close_periods,
         return cache
     else:
         if aggregated_results:
-            aggregated_values = {key: value for key, value in aggregated_results[0].iteritems() if key != '_id'}
+            aggregated_values = {key: value for key, value in aggregated_results[0].items() if key != '_id'}
         else:
             aggregated_values = {label: 0 for label, _, _ in fields_and_operations}
             aggregated_values['count'] = 0

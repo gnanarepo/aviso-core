@@ -156,7 +156,7 @@ def format_val(val, fmt, c=None, ep_cache=None):
         new_val = neg_prefix + '{:0,.2f}'.format(abs_val)
         return str(new_val) + "%"
     elif fmt == 'count':
-        if val==None: val=0
+        if val is None: val=0
         return int(val)
     else:
         return "'%s'" % val
@@ -303,7 +303,7 @@ def get_node_depth(node):
 def dict_of_dicts_gen(dct):
     for w, x in dct.items():
         for y, z in x.items():
-            yield (w, y, z)
+            yield w, y, z
 
 def top_sort(dag,
              nesting=[],

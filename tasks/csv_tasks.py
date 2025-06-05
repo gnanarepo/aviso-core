@@ -61,9 +61,8 @@ def csvdatauploadprocess(reader,  **kwargs):
                 matched_keys.add(matched_rec_extid)
             else:
                 logger.info(
-                    'matched record is not found in the record map %s' % (matched_rec_extid))
-        logger.info('Matched records count %s - total criteria list %s' %
-                    (matched_count, len(criteria_list)))
+                    f'matched record is not found in the record map {matched_rec_extid}')
+        logger.info(f'Matched records count {matched_count} - total criteria list {len(criteria_list)}')
         if not from_scratch:
             deals_to_insert = set(criteria_list) - matched_keys
         else:
@@ -84,14 +83,14 @@ def csvdatauploadprocess(reader,  **kwargs):
                         'Multiple records found for the same cache key %s - update count %s' % (k, len(recs)))
                     update_map[k] = recs
             except:
-                logger.exception("Key not found %s" % (k))
+                logger.exception(f"Key not found {k}")
                 pass
         # Insert recs
         try:
             CSVClass.bulk_insert(rec_list)
             inserts += len(rec_list)
         except Exception as e:
-            logger.info('bulk_insert failed with msg  %s \nsaving one_by_one' %(e.message))
+            logger.info(f'bulk_insert failed with msg  {e} \nsaving one_by_one')
             res = save_one_by_one(rec_list, **kwargs)
             updates = res['updates']
             inserts = res['inserts']
@@ -136,9 +135,9 @@ def csvdatauploadprocess(reader,  **kwargs):
             except Exception as e:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 err_msg = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-                message = "\n".join(["ERROR: custom message", e.message, err_msg])
+                message = "\n".join(["ERROR: custom message", e, err_msg])
                 logger.error(message)
-                raise(e)
+                raise e
 
     batch_size = 5000
     rec_count = 0

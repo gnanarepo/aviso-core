@@ -564,7 +564,7 @@ class DealConfig(BaseConfig):
 
     @cached_property
     def high_leverage_moments(self):
-        '''
+        """
         High leverage moments config is defined to populate high leverage deals insights.
         high_leverage_moments = {
                     'forecast_category_order': ['Pipeline', 'Upside', 'Commit', 'Closed'],
@@ -572,7 +572,7 @@ class DealConfig(BaseConfig):
                     'days': [7,14,21,28],
                     'hlm_threshold': 0.3
                 }
-        '''
+        """
         return self.config.get("high_leverage_moments", {})
 
     @cached_property
@@ -5823,11 +5823,11 @@ class FMConfig(BaseConfig):
 
     @cached_property
     def week_period_editability(self):
-        '''
+        """
             returns string with value 'W'.
             Could be set to 'Q' or 'M'.
             This config is the beginning period from where the weeks needs to be editable
-        '''
+        """
         week_period_editability = self.config.get('week_period_editability', 'W')
         return week_period_editability if week_period_editability in ['Q', 'M', 'W'] else 'W'
 
@@ -6824,7 +6824,7 @@ class FMConfig(BaseConfig):
                 validators[fields[field]['type']](field, fields)
             except AssertionError as e:
                 logger.warning(e)
-                return False, e.message
+                return False, e
             except KeyError:
                 msg = 'invalid field type on field: {}, config: {}'.format(field, fields[field])
                 logger.warning(msg)

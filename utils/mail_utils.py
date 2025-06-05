@@ -40,7 +40,7 @@ def send_mail(subject, body, sender, tolist, reply_to=None, cclist=None, bcclist
     if attachments and not is_html:
         raise Exception('Attachments allowed only with HTML mail')
     #logger.info("%s %s %s", subject, body, settings.DEBUG)
-    if (settings.DEBUG):
+    if settings.DEBUG:
         if isinstance(tolist, (list, tuple)):
             print("This mail content is being printed on console, "
                   "since DEBUG is enabled. DEBUG should be false in production")

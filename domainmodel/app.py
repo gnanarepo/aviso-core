@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import time
+from datetime import UTC
 
 import pytz
 from aviso.framework import tracer
@@ -30,9 +31,9 @@ logger = logging.getLogger('gnana.%s' % __name__)
 
 class AccountEmails(Model):
 
-    '''stores information about all incoming/outgoing
+    """stores information about all incoming/outgoing
     emails for an account id
-    '''
+    """
 
     collection_name = 'account_emails'
     kind = "domainmodel.app.AccountEmails"
@@ -245,7 +246,7 @@ class User(Model):
         device_id_str = device_id["identifier"] if isinstance(device_id, dict) else device_id
         for idx, device_token in enumerate(self.notification_tokens):
             device_token_str = device_token["device_id"]["identifier"] if isinstance(device_token["device_id"], dict) else device_token["device_id"]
-            if(device_id_str == device_token_str):
+            if device_id_str == device_token_str:
                 del self.notification_tokens[idx]
 
     def reset_all_devices(self):
@@ -376,7 +377,7 @@ class User(Model):
         # We are flatting the priv and dim assignment to avoid MongoDB
         # restrictions
         new_roles = {}
-        for r, role_val in self.roles.iteritems():
+        for r, role_val in self.roles.items():
             new_roles[r] = []
             for priv_val in role_val.itervalues():
                 new_roles[r].extend(priv_val.values())
@@ -404,7 +405,7 @@ class User(Model):
             attrs['activation_status'] = None
 
         attrs['valid_devices'] = self.valid_devices
-        attrs['valid_ips'] = {'items': [(k, v) for k, v in self.valid_ips.iteritems()]}
+        attrs['valid_ips'] = {'items': [(k, v) for k, v in self.valid_ips.items()]}
 
         if self.mail_date:
             attrs['mail_date'] = self.mail_date
@@ -439,7 +440,7 @@ class User(Model):
 
         # Read the roles back and put them in the right place
         new_roles = attrs.get('roles', {})
-        for r, flat_list in new_roles.iteritems():
+        for r, flat_list in new_roles.items():
             self.roles[r] = {}
             for priv_tuple in flat_list:
                 priv, dim, write, delegate = priv_tuple
@@ -490,10 +491,10 @@ class User(Model):
                 attr_value = attr_value['items']
 
             if isinstance(attr_value, dict):
-                attr_value = attr_value.iteritems()
+                attr_value = attr_value.items()
 
             for d, d_info in attr_value:
-                if (d_info.get('user_agent', '') == 'Administrative Addition'):
+                if d_info.get('user_agent', '') == 'Administrative Addition':
                     admin_list.append([None, d, d_info])
                 elif now < d_info.get('first_used', 0) + hard_limit and now < d_info.get('last_used', 0) + soft_limit:
                     valid_device_list.append([d_info.get('last_used', 0), d, d_info])
@@ -515,7 +516,7 @@ class User(Model):
             attrs['object']['roles'] = dict((k, {}) for k in attrs['object']['roles'])
         if attrs['_version'] < 3:
             new_roles = {}
-            for r, role_val in attrs['object'].get('roles', {}).iteritems():
+            for r, role_val in attrs['object'].get('roles', {}).items():
                 new_roles[r] = []
                 for priv_val in role_val.itervalues():
                     new_roles[r].append(priv_val)
@@ -653,14 +654,14 @@ class TaskActive(Model):
         t = TaskActive()
         t.pinned = v2task.is_pinned()
         t.extid = v2task.task_id
-        t.deps = list(set(v.res_id for _k, v in v2task.dependencies.iteritems()))
+        t.deps = list(set(v.res_id for _k, v in v2task.dependencies.items()))
         pool_name = v2task.params.get('pool_name', None) or v2task.context.get('pool_name', None)
         t.pool_name = pool_name if pool_name is not None else WORKER_POOL
         t.cname = POOL_PREFIX
         t.cached = v2task.is_cached()
         t.build_id = build_id
         if t.pinned:
-            for _key, task in v2task.dependencies.iteritems():
+            for _key, task in v2task.dependencies.items():
                 if task.is_cached():
                     t.primary_dep = task.res_id
                     break
@@ -775,13 +776,13 @@ class ResultCache(Model):
         return cls.getByFieldValue('extid', extid)
 
     def expire(self):
-        self.expires = datetime.datetime.utcnow() + datetime.timedelta(res_cache_validity)
+        self.expires = datetime.datetime.now(UTC) + datetime.timedelta(res_cache_validity)
 
     def extend_expire(self):
         # extend the TTL of this cache result if it's used as a result tree.
         # only extend it if the cache life of this object is already 1/2 over however
 
-        expires_in = (self.expires - datetime.datetime.utcnow()).total_seconds()
+        expires_in = (self.expires - datetime.datetime.now(UTC)).total_seconds()
         fuzzy_window = 300  #  five 5 mins so it does not update continuously while creating a new tree.
         half_of_cache_time = datetime.timedelta(res_cache_validity).total_seconds()/2
 
@@ -799,7 +800,7 @@ class ResultCache(Model):
         shell.path = v2task.path
         shell.cache_key = v2task.cache_key
         shell.as_of_mnemonic = v2task.as_of_mnemonic
-        shell.deps = list(set(v.res_id for k, v in v2task.dependencies.iteritems()))
+        shell.deps = list(set(v.res_id for k, v in v2task.dependencies.items()))
         shell.cached = v2task.is_cached()
         if 'analyticengine' in v2task.path:
             shell.expires = date_utils.now() + datetime.timedelta(res_cache_analyticengine_validity)
@@ -960,13 +961,13 @@ class ResultCache(Model):
         return cls.getByFieldValue('extid', extid)
 
     def expire(self):
-        self.expires = datetime.datetime.utcnow() + datetime.timedelta(res_cache_validity)
+        self.expires = datetime.datetime.now(UTC) + datetime.timedelta(res_cache_validity)
 
     def extend_expire(self):
         # extend the TTL of this cache result if it's used as a result tree.
         # only extend it if the cache life of this object is already 1/2 over however
 
-        expires_in = (self.expires - datetime.datetime.utcnow()).total_seconds()
+        expires_in = (self.expires - datetime.datetime.now(UTC)).total_seconds()
         fuzzy_window = 300  #  five 5 mins so it does not update continuously while creating a new tree.
         half_of_cache_time = datetime.timedelta(res_cache_validity).total_seconds()/2
 
@@ -984,7 +985,7 @@ class ResultCache(Model):
         shell.path = v2task.path
         shell.cache_key = v2task.cache_key
         shell.as_of_mnemonic = v2task.as_of_mnemonic
-        shell.deps = list(set(v.res_id for k, v in v2task.dependencies.iteritems()))
+        shell.deps = list(set(v.res_id for k, v in v2task.dependencies.items()))
         shell.cached = v2task.is_cached()
         if 'analyticengine' in v2task.path:
             shell.expires = date_utils.now() + datetime.timedelta(res_cache_analyticengine_validity)
@@ -1136,7 +1137,7 @@ class Task(Model):
         t.consumers = v2task.consumers
         if parent_id not in t.consumers and parent_id != v2task.task_id:
             t.consumers.append(parent_id)
-        t.deps = dict((k, v.res_id) for k, v in v2task.dependencies.iteritems())
+        t.deps = dict((k, v.res_id) for k, v in v2task.dependencies.items())
         logger.info("*** - registering %s, %s, %s, build_id: %s",
                     v2task.name, res_id, v2task.task_id, build_id)
         pool_name = v2task.params.get('pool_name', None) or v2task.context.get('pool_name', None)
@@ -1165,8 +1166,7 @@ class Task(Model):
                 res.status = ResultCache.FAILED
                 res.save(is_partial=True, field_list=['object.status'])
             TaskActive.truncate_or_drop({'object.extid': self.extid})
-            logger.exception("on_submit found error status for task %s. So, revoking this task" %
-                             (self.extid))
+            logger.exception(f"on_submit found error status for task {self.extid}. So, revoking this task")
             raise Exception("on_submit found error status")
         self.submit_time = date_utils.now()
         self.ip_address = node
@@ -1308,7 +1308,7 @@ class Task(Model):
 
         if t:
             try:
-                t.ready_since = ready_since or datetime.datetime.utcnow()
+                t.ready_since = ready_since or datetime.datetime.now(UTC)
                 t.save(is_partial=True, field_list=['object.ready_since'])
                 return True
             except:
@@ -1393,7 +1393,7 @@ class TaskArchive(Task):
 
         from tasks import gnana_task_support
         try:
-            logger.info("Archiving task %s" % (task_obj.extid))
+            logger.info(f"Archiving task {task_obj.extid}")
             task_data = {}
             task_to_archive = TaskArchive()
             task_data = task_obj.__dict__

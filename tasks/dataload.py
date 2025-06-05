@@ -57,7 +57,7 @@ def merge_inbox_entries_to_uip(user_and_tenant, datasetname, stagename,
     record_count = len(distinct_entries)
 
     tasks = []
-    while (distinct_entries):
+    while distinct_entries:
         firstslice = distinct_entries[0:1000]
         distinct_entries = distinct_entries[1000:]
         tasks.append(process_inbox_entries.subtask(args=(user_and_tenant, dataset.name, stagename, firstslice,),
@@ -65,7 +65,7 @@ def merge_inbox_entries_to_uip(user_and_tenant, datasetname, stagename,
                                                        'trace': tracer.trace},
                                                    options={'queue': queue_name('worker')}))
 
-    if (tasks):
+    if tasks:
         async_res = [asynctasks.subtask_handler(
             t, queue=queue_name('worker'), d=2) for t in tasks]
         # We have to wait for the response.  Otherwise we will drop the

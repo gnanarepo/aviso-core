@@ -174,7 +174,7 @@ class UIPRecord(Model):
         # LATER: Remove this extid convention.  At least make it
         # second positional argument
 
-        if(isinstance(extid, dict) and attrs is None):
+        if isinstance(extid, dict) and attrs is None:
             attrs = extid
             extid = attrs['object']['extid']
 
@@ -197,13 +197,13 @@ class UIPRecord(Model):
         # save some time
         attrs = gnana_db.findDocument(cls.getCollectionName(),
                                       {'object.' + field: sec_context.encrypt(value)}, check_unique)
-        if(attrs):
+        if attrs:
             return cls(attrs=attrs)
         else:
             return None
 
     def encode(self, attrs):
-        if(self.ID is None):
+        if self.ID is None:
             raise UIPError("All UIP entries should have an external ID")
         attrs['extid'] = self.ID
         attrs['values'] = {}
@@ -588,8 +588,8 @@ class UIPRecord(Model):
         try:
             return MV_HANDLERS[mvc[0]](val, mvc[1:], ID)
         except Exception as e:
-            e.message += 'Error with multi_value_fields. MVC: %s' % mvc
-            logger.exception(e.message)
+            e += f'Error with multi_value_fields. MVC: {mvc}'
+            logger.exception(e)
             raise e
 
     def decode(self, attrs):
@@ -710,9 +710,9 @@ class UIPRecord(Model):
                          NA_before_created_date=False,
                          default_value='N/A',
                          epoch_dates=False):
-        '''  Returns array of tuples, each val is the as of value of the series found in the aFeature dictionary as of fdate
+        """  Returns array of tuples, each val is the as of value of the series found in the aFeature dictionary as of fdate
              The keys are sorted before insertion in the final output
-        '''
+        """
         if hist_fdate is None:
             hist_fdate = fdate
         history = self.getAsOfDateF(aFeature,
@@ -753,9 +753,9 @@ class UIPRecord(Model):
                         default_value='N/A',
                         epoch_dates=False,
                         epoch_cache=None):
-        '''  Returns array of tuples, each val is the as of value of the series found in the aFeature dictionary as of fdate
+        """  Returns array of tuples, each val is the as of value of the series found in the aFeature dictionary as of fdate
              The keys are sorted before insertion in the final output
-        '''
+        """
         fdate = self.get_fdate_from_epoch_cache(asOfDate, epoch_cache)
         return self.getScheduleAsOfF(aFeature,
                                      fdate,
@@ -769,9 +769,9 @@ class UIPRecord(Model):
                           aFeature,
                           default_value='N/A',
                           epoch_dates=False):
-        '''  Returns array of tuples, each val is the as of value of the series found in the aFeature dictionary as of fdate
+        """  Returns array of tuples, each val is the as of value of the series found in the aFeature dictionary as of fdate
              The keys are sorted before insertion in the final output
-        '''
+        """
 
         history = self.getLatest(aFeature,
                                  default_value=default_value)
@@ -913,9 +913,9 @@ class UIPRecord(Model):
         first value
         """
         if aFeature not in self.featMap:
-            return (default_value, default_value)
+            return default_value, default_value
         if NA_before_created_date and fdate < self.created_date:
-            return (default_value, default_value)
+            return default_value, default_value
         hist_values = self.featMap[aFeature]
         value = None
         ts = None
@@ -933,12 +933,12 @@ class UIPRecord(Model):
             if value is None:
                 raise ValueError
 
-            return (ts, value)
+            return ts, value
         except:
             if not first_value_on_or_after:
-                return (default_value, default_value)
+                return default_value, default_value
             else:
-                return (hist_values[0][0], hist_values[0][1])
+                return hist_values[0][0], hist_values[0][1]
 
     def firstKnownTimes(self, aFeature, value_to_match, asOfDate):
         fdate = datetime2xl(asOfDate)
@@ -983,10 +983,10 @@ class UIPRecord(Model):
             value_timestamp = None
             hist_values = self.featMap[aFeature]
             for time_stamp, dummy in hist_values:
-                if(time_stamp > fdate):
+                if time_stamp > fdate:
                     break
                 value_timestamp = time_stamp
-            if(not value_timestamp):
+            if not value_timestamp:
                 raise ValueError
             return fdate - value_timestamp
         except:
@@ -1009,12 +1009,12 @@ class UIPRecord(Model):
             hist_values = self.featMap[aFeature]
             idx = 0
             for time_stamp, val in hist_values[:-1]:
-                if(time_stamp > fdate):
+                if time_stamp > fdate:
                     break
                 value_timestamp = time_stamp
                 ret_val[val] += hist_values[idx + 1][0] - value_timestamp
                 idx += 1
-            if(not value_timestamp):
+            if not value_timestamp:
                 raise ValueError
             if fdate >= hist_values[idx + 1][0]:
                 ret_val[val] += fdate - hist_values[idx + 1][0]
@@ -1343,7 +1343,7 @@ class MongoDBDirect(DataHandler):
                 override_minimum=1000000, # assuming that one-to-may will not use more than a million recs
                 record_range=[0,1000000], log_info=False))
         if not recs:
-            raise KeyError("ERROR: %s==%s not found in mongodb" % self.criteria_key, k)
+            raise KeyError(f"ERROR: {self.criteria_key}=={k} not found in mongodb")
         if self.prepare_ds:
             [rec.prepare(self.ds_inst) for rec in recs]
         if self.other_flds:

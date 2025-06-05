@@ -114,13 +114,13 @@ class Feature:
         return ds_config_dict.get(nesting[-1], default_ret)
 
     def commit_dataset_config_changes(self, dataset, stage, change_list, comments):
-        '''
+        """
         dataset: dataset name
         stage: stage name
         change_list: a list of tuples where each tuple contains action, path and new_value
                     **if action is 'remove_path' then we should pass new_value as None
         comments: comments
-        '''
+        """
         if not change_list:
             return
         ds = datameta.Dataset.getByName(dataset)

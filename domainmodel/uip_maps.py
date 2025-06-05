@@ -18,8 +18,6 @@ from utils import relativedelta
 from domainmodel.csv_data import CSVDataClass
 from collections import OrderedDict
 
-
-
 logger = logging.getLogger('gnana.%s' % __name__)
 
 EVENT_AGGR_CACHE = {}
@@ -119,7 +117,7 @@ def translation_functions(fn):
         raise KeyError(
             'The function ' + fn + ' is not defined in the maps')
     if available_fns.get(fn):
-        return(available_fns[fn])
+        return available_fns[fn]
     else:
         return None
 
@@ -233,11 +231,7 @@ class Join(ManyToOneDBMap):
             fld_defs = self.config['fld_defs']
             src_ds_name = self.config['ds_name']
             for key, defs in fld_defs.items():
-                fld = {}
-                fld["name"] = key
-                fld["dep_flds"] = {src_ds_name: defs['req_fields']}
-                fld["format"] = "N/A"
-                fld["source"] = "Direct"
+                fld = {"name": key, "dep_flds": {src_ds_name: defs['req_fields']}, "format": "N/A", "source": "Direct"}
                 out_fields.append(fld)
             return out_fields
 
@@ -252,7 +246,7 @@ class Join(ManyToOneDBMap):
             schema["out_fld"] = {"type": "string", "label": "Out Field"}
             schema["fallback_val"] = {"type": "string", "label": "fallback value"}
             field_info['schema'] = schema
-            field_info['order'] = ["req_fields","out_fld","fallback_val"]
+            field_info['order'] = ["req_fields", "out_fld", "fallback_val"]
             data = []
             for key, defs in fld_defs.items():
                 record = {}
@@ -541,7 +535,7 @@ class AdornWithProductCategories(OneToManyDBMap):
             if amt == "N/A":
                 amt = 0.0
             else:
-                amt = float(amt)   # add amount for date
+                amt = float(amt)  # add amount for date
             splts[splt_val] += amt
         for label in splts.keys():
             uip_obj.featMap['ProductLabel_' + label] = [[uip_obj.created_date, splts[label]]]
@@ -555,11 +549,11 @@ class TranslateValues(UIPMap):
         super(TranslateValues, self).__init__(feature, config, stage_ds)
 
     def get_map_details(self, output_fields_only=False):
-            if output_fields_only:
-                out_fields = [{"name": self.out_fld, "format": "N/A", "dep_flds": {"self": [self.in_flds[0]]}}]
-                return out_fields
-            else:
-                return None
+        if output_fields_only:
+            out_fields = [{"name": self.out_fld, "format": "N/A", "dep_flds": {"self": [self.in_flds[0]]}}]
+            return out_fields
+        else:
+            return None
 
     def process(self, uip_obj):
         out_fld = self.out_fld
@@ -709,32 +703,32 @@ class CalculateAdjustedStages(UIPMap):
         super(CalculateAdjustedStages, self).__init__(feature, config, stage_ds)
 
     def get_map_details(self, output_fields_only=False):
-            if output_fields_only:
-                adjusted_stage_fld = self.out_fld
-                adjusted_orig_stage_fld = self.config['adjusted_orig_stage_field']
-                adjusted_win_date_fld = self.config['adjusted_win_date_field']
-                adjusted_lose_date_fld = self.config['adjusted_lose_date_field']
-                adjusted_created_date_fld = self.config['adjusted_created_date_field']
-                adjusted_w2l_date_field = self.config.get('adjusted_win_to_lose_date', 'win_to_lose_date_adj')
-                adjusted_l2w_date_field = self.config.get('adjusted_lose_to_win_date', 'lose_to_win_date_adj')
-                adjusted_w2a_date_field = self.config.get('adjusted_win_to_active_date', 'win_to_active_date_adj')
-                adjusted_l2a_date_field = self.config.get('adjusted_lose_to_active_date', 'lose_to_active_date_adj')
-                adjusted_close_date_field = self.config.get('adjusted_close_date', 'CloseDate_adj')
-                terminal_fate_field = self.config.get('terminal_fate_field', 'terminal_fate')
-                out_fields = [{"name": adjusted_stage_fld, "format": "string", "dep_flds": None},
-                                  {"name": adjusted_orig_stage_fld, "format": "string", "dep_flds": None},
-                                  {"name": adjusted_win_date_fld, "format": "xl_date", "dep_flds": None},
-                                  {"name": adjusted_lose_date_fld, "format": "xl_date", "dep_flds": None},
-                                  {"name": adjusted_created_date_fld, "format": "xl_date", "dep_flds": None},
-                                  {"name": adjusted_w2l_date_field, "format": "xl_date", "dep_flds": None},
-                                  {"name": adjusted_l2w_date_field, "format": "xl_date", "dep_flds": None},
-                                  {"name": adjusted_w2a_date_field, "format": "xl_date", "dep_flds": None},
-                                  {"name": adjusted_l2a_date_field, "format": "xl_date", "dep_flds": None},
-                                  {"name": adjusted_close_date_field, "format": "xl_date", "dep_flds": None},
-                                  {"name": terminal_fate_field, "format": "char", "dep_flds": None}]
-                return out_fields
-            else:
-                return None
+        if output_fields_only:
+            adjusted_stage_fld = self.out_fld
+            adjusted_orig_stage_fld = self.config['adjusted_orig_stage_field']
+            adjusted_win_date_fld = self.config['adjusted_win_date_field']
+            adjusted_lose_date_fld = self.config['adjusted_lose_date_field']
+            adjusted_created_date_fld = self.config['adjusted_created_date_field']
+            adjusted_w2l_date_field = self.config.get('adjusted_win_to_lose_date', 'win_to_lose_date_adj')
+            adjusted_l2w_date_field = self.config.get('adjusted_lose_to_win_date', 'lose_to_win_date_adj')
+            adjusted_w2a_date_field = self.config.get('adjusted_win_to_active_date', 'win_to_active_date_adj')
+            adjusted_l2a_date_field = self.config.get('adjusted_lose_to_active_date', 'lose_to_active_date_adj')
+            adjusted_close_date_field = self.config.get('adjusted_close_date', 'CloseDate_adj')
+            terminal_fate_field = self.config.get('terminal_fate_field', 'terminal_fate')
+            out_fields = [{"name": adjusted_stage_fld, "format": "string", "dep_flds": None},
+                          {"name": adjusted_orig_stage_fld, "format": "string", "dep_flds": None},
+                          {"name": adjusted_win_date_fld, "format": "xl_date", "dep_flds": None},
+                          {"name": adjusted_lose_date_fld, "format": "xl_date", "dep_flds": None},
+                          {"name": adjusted_created_date_fld, "format": "xl_date", "dep_flds": None},
+                          {"name": adjusted_w2l_date_field, "format": "xl_date", "dep_flds": None},
+                          {"name": adjusted_l2w_date_field, "format": "xl_date", "dep_flds": None},
+                          {"name": adjusted_w2a_date_field, "format": "xl_date", "dep_flds": None},
+                          {"name": adjusted_l2a_date_field, "format": "xl_date", "dep_flds": None},
+                          {"name": adjusted_close_date_field, "format": "xl_date", "dep_flds": None},
+                          {"name": terminal_fate_field, "format": "char", "dep_flds": None}]
+            return out_fields
+        else:
+            return None
 
     def process(self, uip_obj):
         if len(self.in_flds) != 2:
@@ -1223,11 +1217,11 @@ class AdornWithHierarchy(ManyToOneDBMap):
             return ["%s_%s" % (self.out_fld, i) for i in range(depth)]
 
     def get_hier_change_times(
-        self,
-        base_lookup_hist,
-        parent_lookup_fld,
-        data_handler,
-        warn_if_missing,
+            self,
+            base_lookup_hist,
+            parent_lookup_fld,
+            data_handler,
+            warn_if_missing,
     ):
         '''
         provide a list of timestamps which denote the times when a hierarchy change takes place
@@ -1276,21 +1270,21 @@ class AdornWithHierarchy(ManyToOneDBMap):
         return sorted(change_times)
 
     def get_hierarchy_as_of(
-        self,
-        as_of,
-        base_lookup_val,
-        parent_lookup_fld,
-        display_fld,
-        parent_display_fld,
-        drop_completely_na,
-        look_fwd_if_na,
-        na_b4_created,
-        action_if_does_not_honor_ceo,
-        ceo_lookup_id,
-        ceo_display_name,
-        fill_down_scheme,
-        depth,
-        data_handler,
+            self,
+            as_of,
+            base_lookup_val,
+            parent_lookup_fld,
+            display_fld,
+            parent_display_fld,
+            drop_completely_na,
+            look_fwd_if_na,
+            na_b4_created,
+            action_if_does_not_honor_ceo,
+            ceo_lookup_id,
+            ceo_display_name,
+            fill_down_scheme,
+            depth,
+            data_handler,
     ):
         hierarchy = []
         base_display_val = 'N/A'
@@ -1315,7 +1309,7 @@ class AdornWithHierarchy(ManyToOneDBMap):
             parent_rec = data_handler[parent_lookup_val][0] if parent_lookup_val in data_handler else None
         hierarchy = hierarchy[::-1]  # will have at least one entry for the base_lookup
         if action_if_does_not_honor_ceo:
-            if (ceo_lookup_id and (hierarchy[0][0] != ceo_lookup_id)):
+            if ceo_lookup_id and (hierarchy[0][0] != ceo_lookup_id):
                 if action_if_does_not_honor_ceo == 'drop':
                     return []
                 elif action_if_does_not_honor_ceo == 'force':
@@ -1395,6 +1389,7 @@ class AdornWithProductAmounts(OneToManyDBMap):
     },
 
     """
+
     def get_map_details(self, output_fields_only=False):
         return None
 
@@ -1474,15 +1469,15 @@ class AdornWithProductAmounts(OneToManyDBMap):
             for product in ea.output_featmap:
                 if product == '_'.join((grpby_amt_fld, dummy_val)) or product == tot_amt_fld:
                     continue
-                new_product = product[len(grpby_amt_fld)+len(dummy_val)+2:]
+                new_product = product[len(grpby_amt_fld) + len(dummy_val) + 2:]
                 newDict[new_product] = []
                 counter = 0
                 for ts in all_tss:
                     if ea.output_featmap[product][0][0] > ts:
                         newDict[new_product].append([ts, 0])
                     else:
-                        while counter < len(ea.output_featmap[product])-1:
-                            if ea.output_featmap[product][counter+1][0] > ts:
+                        while counter < len(ea.output_featmap[product]) - 1:
+                            if ea.output_featmap[product][counter + 1][0] > ts:
                                 break
                             counter += 1
                         newDict[new_product].append([ts, ea.output_featmap[product][counter][1]])
@@ -1493,12 +1488,13 @@ class AdornWithProductAmounts(OneToManyDBMap):
                 val = {}
                 for product in newDict:
                     if (not prune_zeros or newDict[product][i][1] != 0) and total[ts] != 0:
-                        val[product] = newDict[product][i][1]/total[ts]
+                        val[product] = newDict[product][i][1] / total[ts]
                 outfield.append([ts, val])
                 i += 1
             uip_obj.featMap['_'.join((grpby_amt_fld, dummy_val, 'Splits'))] = outfield
             temp = '_'.join((grpby_amt_fld, dummy_val))
-            uip_obj.featMap[temp] = ea.output_featmap[temp] if ea.output_featmap[temp] else [[uip_obj.created_date, 0.0]]
+            uip_obj.featMap[temp] = ea.output_featmap[temp] if ea.output_featmap[temp] else [
+                [uip_obj.created_date, 0.0]]
             uip_obj.featMap[tot_amt_fld] = ea.output_featmap[tot_amt_fld]
 
         if self.config.get('__COMPRESS__', True):
@@ -1628,7 +1624,7 @@ class AdornWithRevenueSchedule(OneToManyDBMap):
             splt_amount_fld = self.config.get('splt_amount_fld', None)
             ds_name = self.config['ds_name']
             out_fields = [{'name': self.out_fld, 'format': 'revenue_schedule',
-                               'dep_flds': {ds_name: [splt_amount_fld]}}]
+                           'dep_flds': {ds_name: [splt_amount_fld]}}]
             return out_fields
         else:
             return None
@@ -1693,7 +1689,7 @@ class AdornWithRevenueSchedule(OneToManyDBMap):
                     event_ts = event[0]
                     event_val = event[1]
                     if event_val > rs_amount_hi or event_val < rs_amount_low:
-                        if event_val*previous_val > 0.0:
+                        if event_val * previous_val > 0.0:
                             event_val = previous_val
                         else:
                             event_val = -previous_val
@@ -1723,15 +1719,15 @@ class BookingsToRevenueSchedule(UIPMap):
         super(BookingsToRevenueSchedule, self).__init__(feature, config, stage_ds)
 
     def get_map_details(self, output_fields_only=False):
-            if output_fields_only:
-                out_fields = []
-                amt_flds = self.config["amount_flds"]
-                for amt_fld in amt_flds:
-                    out_fields.append({'name': self.out_fld + '_' + amt_fld, 'format': 'revenue_schedule',
-                                    "dep_flds": {"self": [amt_fld]}})
-                return out_fields
-            else:
-                return None
+        if output_fields_only:
+            out_fields = []
+            amt_flds = self.config["amount_flds"]
+            for amt_fld in amt_flds:
+                out_fields.append({'name': self.out_fld + '_' + amt_fld, 'format': 'revenue_schedule',
+                                   "dep_flds": {"self": [amt_fld]}})
+            return out_fields
+        else:
+            return None
 
     def process(self, uip_obj):
         """
@@ -2625,11 +2621,11 @@ class EventAggregation(OneToManyDBMap):
 
         def_event_creator = lambda begin_ts, end_ts, record: [(record.created_date, 1)] \
             if ((end_ts is None) or (record.created_date <= end_ts)) and \
-            ((begin_ts is None) or (record.created_date >= begin_ts)) \
+               ((begin_ts is None) or (record.created_date >= begin_ts)) \
             else []
         EVENT_AGGR_CACHE["def_event_creator"] = lambda begin_ts, end_ts, record: [(record.created_date, 1)] \
             if ((end_ts is None) or (record.created_date <= end_ts)) and \
-            ((begin_ts is None) or (record.created_date >= begin_ts)) \
+               ((begin_ts is None) or (record.created_date >= begin_ts)) \
             else []
         EVENT_AGGR_CACHE["add"] = operator.add
         for out_fld, dtls in fld_defs.items():
@@ -2809,8 +2805,8 @@ class CCYConv(UIPMap):
             if ccy_fld not in uip_obj.featMap:
                 if self.config.get('warn_no_ccy', False):
                     logger.warning("id='%s' has no currency code: assuming to base currency '%s'",
-                                uip_obj.ID,
-                                base_ccy)
+                                   uip_obj.ID,
+                                   base_ccy)
                 ccy = base_ccy
                 conv_rate = get_conv_rate(ccy)
                 uip_obj.featMap[self.out_fld] = [(ts, excelToFloat(amt) * conv_rate)
@@ -2846,6 +2842,7 @@ class CCYConv(UIPMap):
                         del uip_obj.featMap[self.out_fld]
         if self.config.get('__COMPRESS__', True):
             return [self.out_fld]
+
 
 class DatedCCYConv(UIPMap):
 
@@ -3024,7 +3021,8 @@ class MergeFields(UIPMap):
             else:
                 # switch_over_trans is the transformation function, defaulted to the end of the quarter of the timestamp given
                 # switch_over_ts is the last timestamp of the switch_over_field
-                switch_over_trans = eval(self.config.get('switch_over_trans', 'lambda x:datetime2xl(next_period(xl2datetime(x)).begin)'))
+                switch_over_trans = eval(
+                    self.config.get('switch_over_trans', 'lambda x:datetime2xl(next_period(xl2datetime(x)).begin)'))
                 switch_over_ts = uip_obj.featMap.get(switch_over_fld)[-1][0]
                 switch_over_date = switch_over_trans(switch_over_ts)
         switch_over_default_value = self.config.get('switch_over_default_value', None)
@@ -3058,10 +3056,10 @@ class MergeFields(UIPMap):
 
         if (not new_field_transf) and (not old_field_transf):
             return
-        if (not new_field_transf):
+        if not new_field_transf:
             uip_obj.featMap[self.out_fld] = list(old_field_transf)
             return
-        if (not old_field_transf):
+        if not old_field_transf:
             uip_obj.featMap[self.out_fld] = list(new_field_transf)
             return
         # if made it here both fields are present
@@ -3116,7 +3114,7 @@ class TransformTimestamps(UIPMap):
                 continue
             old_uip = uip_obj.featMap[field]
             new_uip = [[ts + offset, val] for ts, val in old_uip] if offset is not None else \
-                      [[field_transform(ts), val] for ts, val in old_uip]
+                [[field_transform(ts), val] for ts, val in old_uip]
             uip_obj.featMap[field + fld_sfx] = new_uip
 
 
@@ -3213,7 +3211,8 @@ class CopyFilterField(UIPMap):
             if filter_fld not in uip_obj.featMap:
                 uip_obj.featMap[self.out_fld].append([ts, default_val])
                 break
-            if filter_fn(uip_obj.getAsOfDateF(filter_fld, ts, first_value_on_or_after=True, NA_before_created_date=False)):
+            if filter_fn(
+                    uip_obj.getAsOfDateF(filter_fld, ts, first_value_on_or_after=True, NA_before_created_date=False)):
                 uip_obj.featMap[self.out_fld].append([ts, val])
             else:
                 uip_obj.featMap[self.out_fld].append([ts, fill_val])
@@ -3221,7 +3220,8 @@ class CopyFilterField(UIPMap):
             try:
                 for ts, val in uip_obj.featMap[filter_fld]:
                     if filter_fn(val):
-                        in_val = uip_obj.getAsOfDateF(in_fld, ts, first_value_on_or_after=True, NA_before_created_date=False)
+                        in_val = uip_obj.getAsOfDateF(in_fld, ts, first_value_on_or_after=True,
+                                                      NA_before_created_date=False)
                         uip_obj.featMap[self.out_fld].append([ts, in_val])
                     else:
                         uip_obj.featMap[self.out_fld].append([ts, fill_val])
@@ -3284,7 +3284,8 @@ class Backdate(UIPMap):
         if not featHist or len(featHist) < 1:
             return
         uip_obj.featMap[self.out_fld] = [
-            (uip_obj.created_date, featHist[0][1])] + [(ts, val) for ts, val in featHist[1:]]
+                                            (uip_obj.created_date, featHist[0][1])] + [(ts, val) for ts, val in
+                                                                                       featHist[1:]]
         if self.config.get('__COMPRESS__', False):  # backdating should not require compression
             return [self.out_fld]
 
@@ -3380,7 +3381,7 @@ class DeleteFields(UIPMap):
         if output_fields_only:
             for field in self.field_list:
                 out_fields = [{'name': self.out_fld, 'format': 'float',
-                                   'dep_flds': {'self': [field]}, 'action': 'removed'}]
+                               'dep_flds': {'self': [field]}, 'action': 'removed'}]
             return out_fields
         else:
             return None
@@ -3434,7 +3435,7 @@ class CreateACVTimeline(UIPMap):
             out_fields.append({'name': "won_then_lost_opps", 'format': "N/A", 'dep_flds': None})
             out_fields.append({'name': "num_won_opps", 'format': "N/A", 'dep_flds': None})
             out_fields.append({'name': "num_lost_opps", 'format': "N/A", 'dep_flds': None})
-            out_fields.append({'name': "closed_opps", 'format': "N/A", "dep_flds":None})
+            out_fields.append({'name': "closed_opps", 'format': "N/A", "dep_flds": None})
             return out_fields
         else:
             return None
@@ -3447,8 +3448,8 @@ class CreateACVTimeline(UIPMap):
         config = {
             'opp_dataset': 'OppDS',
             'opp_dataset_stage': None,
-            'opp_filter_accept':  {u'SubType': [u'SaaS Contract']},
-            'opp_filter_reject':  {u'Stage': [u'SFDCDELETED', 'Closed - Deleted']},
+            'opp_filter_accept': {u'SubType': [u'SaaS Contract']},
+            'opp_filter_reject': {u'Stage': [u'SFDCDELETED', 'Closed - Deleted']},
             'amount_field_name': 'Amount_USD',
             'oppds_account_id_field': 'AccountID',
             'close_date_field_name': 'Close Date',
@@ -3484,13 +3485,13 @@ class CreateACVTimeline(UIPMap):
 
             opp_passes_filter = True
             for feature, values in config['opp_filter_accept'].items():
-                if(opp.getLatest(feature) not in values):
+                if opp.getLatest(feature) not in values:
                     opp_passes_filter = False
                     break
             if opp_passes_filter is False:
                 continue
             for feature, values in config['opp_filter_reject'].items():
-                if(opp.getLatest(feature) in values):
+                if opp.getLatest(feature) in values:
                     opp_passes_filter = False
                     break
             if opp_passes_filter is False:
@@ -3553,8 +3554,8 @@ class CreateACVTimeline(UIPMap):
                 closed_opps[-1][0],
                 len(filter(lambda x: not x[1]['win'], closed_opps))
             ]]
-#        if uip_obj.featMap['num_won_opps'][-1][1] == 0:
-#            return
+        #        if uip_obj.featMap['num_won_opps'][-1][1] == 0:
+        #            return
         opp_type_map = config['opp_type_map']
         ACV_timeline = []
         downsell_timeline = []
@@ -3571,19 +3572,19 @@ class CreateACVTimeline(UIPMap):
                 continue
             mapped_type = opp_type_map[opp_type]
 
-#            if opp_info['ACV']<0.0:
-# no matter if it is won or lost, take that ACV away
-#                if not ACV_timeline:
-#                    if not config['suppress_warnings']:
-#                        logger.warning('The opp '+opp_info['ID']+'  which is  first won or lost opp, ACV cannot be negative')
-#                else:
-# this if shouldn't be there but replicon's data is so messy - so I am hacking to move forward
-#                    if mapped_type == 'reset':
-#                        downsell_timeline.append([t, -opp_info['ACV']])
-# if this causes a total churn do not add to acv timeline so that the last acv point is preserved
-#                    if ACV_timeline[-1][1]+ opp_info['ACV']>0.0:
-#                        ACV_timeline.append([t, ACV_timeline[-1][1]+ opp_info['ACV']])
-#                continue
+            #            if opp_info['ACV']<0.0:
+            # no matter if it is won or lost, take that ACV away
+            #                if not ACV_timeline:
+            #                    if not config['suppress_warnings']:
+            #                        logger.warning('The opp '+opp_info['ID']+'  which is  first won or lost opp, ACV cannot be negative')
+            #                else:
+            # this if shouldn't be there but replicon's data is so messy - so I am hacking to move forward
+            #                    if mapped_type == 'reset':
+            #                        downsell_timeline.append([t, -opp_info['ACV']])
+            # if this causes a total churn do not add to acv timeline so that the last acv point is preserved
+            #                    if ACV_timeline[-1][1]+ opp_info['ACV']>0.0:
+            #                        ACV_timeline.append([t, ACV_timeline[-1][1]+ opp_info['ACV']])
+            #                continue
 
             if mapped_type == 'new':
                 if opp_info['win'] is True:
@@ -3662,6 +3663,7 @@ class Cumsum(UIPMap):
         uip_obj.featMap[self.out_fld] = output
         if self.config.get('__COMPRESS__', True):
             return [self.out_fld]
+
 
 class CountDistinctValues(UIPMap):
 
@@ -3796,8 +3798,8 @@ class AdornWithRelativeMonth(UIPMap):
         bounds = chain.from_iterable([self.make_boundaries(ts, d) for ts, d in dates])
         sorted_bounds = list(trimsort(bounds, 0, key=lambda x: (x[0], -x[2])))
         rel_months = [[date, rel_val] for i, (date, rel_val, ts) in enumerate(sorted_bounds)
-                      if i in [0, len(sorted_bounds) -1]
-                      or ts >= sorted_bounds[i-1][2]]
+                      if i in [0, len(sorted_bounds) - 1]
+                      or ts >= sorted_bounds[i - 1][2]]
         uip_obj.featMap[self.out_fld] = rel_months
         return self.out_fld
 
@@ -3807,14 +3809,14 @@ class AdornWithRelativeMonth(UIPMap):
         delta = relativedelta.relativedelta(d_ep.as_datetime(), ts_ep.as_datetime())
         tot_diff = delta.months + (12 * delta.years)
         if delta < 0:
-            return[(ts, 'h', ts)]
+            return [(ts, 'h', ts)]
         if tot_diff == 0:
             return [(ts, 'c', ts), (get_future_bom(ts_ep, delta, 1).as_xldate(), 'h', ts)]
-        return [(ts, 'f', ts), (get_future_bom(ts_ep, delta).as_xldate(), 'c', ts), (get_future_bom(ts_ep, delta, 1).as_xldate(), 'h', ts)]
+        return [(ts, 'f', ts), (get_future_bom(ts_ep, delta).as_xldate(), 'c', ts),
+                (get_future_bom(ts_ep, delta, 1).as_xldate(), 'h', ts)]
 
 
 class AdornWithMonths(UIPMap):
-
     """ Adorn with the relative month in quarter of the input field.
         For example, for a tenant with Q1: Jan-March.
         Note that this might not play nicely with tenants using more advanced features like
@@ -3856,8 +3858,9 @@ class AdornWithMonths(UIPMap):
                                   for x in get_all_periods('M', [])])[12 + month_offset:]
             ALL_PERIODS_CACHE[tenant_name] = {'month_starts': month_starts}
 
-        uip_obj.featMap[self.out_fld] = [(ts, (searchsorted(month_starts, float(date_val) + time_buffer, side='right') % 3) + 1)
-                                         for (ts, date_val) in in_series]
+        uip_obj.featMap[self.out_fld] = [
+            (ts, (searchsorted(month_starts, float(date_val) + time_buffer, side='right') % 3) + 1)
+            for (ts, date_val) in in_series]
 
 
 class MoveDateValues(UIPMap):
@@ -3955,6 +3958,7 @@ class ResetObjCreatedDate(UIPMap):
     calculating the adjustedstages, especially if you have shifted the
     timestamps for demo purposes
     '''
+
     def __init__(self, feature, config=None, stage_ds=None):
         super(ResetObjCreatedDate, self).__init__(feature, config, stage_ds)
 
@@ -3974,6 +3978,7 @@ class AdhocReplacements(UIPMap):
     [ u'0066000001SnPaw',u'Amount',41229,6000000.0]],
                                           'exec_rank':-3}
     '''
+
     def __init__(self, feature, config=None, stage_ds=None):
         super(AdhocReplacements, self).__init__(feature, config, stage_ds)
 
@@ -3997,7 +4002,7 @@ class AdhocReplacements(UIPMap):
             if str(x[2]).startswith('last'):
                 x[2] = x[2][4:]
                 try:
-                    uip_obj.featMap[my_field].append([uip_obj.featMap[my_field][-1][0]+float(x[2]), x[3]])
+                    uip_obj.featMap[my_field].append([uip_obj.featMap[my_field][-1][0] + float(x[2]), x[3]])
                     uip_obj.featMap[my_field] = sorted(uip_obj.featMap[my_field])
                 except:
                     pass
@@ -4077,10 +4082,10 @@ class EmailActivityScore(UIPMap):
         hist = [[0, 0]]
         raw_hist = [[0, None]]
         lookup_val = uip_obj.getLatest(self.lookup_fld)
-        account =  None
+        account = None
         try:
             account = AccountEmails.getBySpecifiedCriteria({'object.account_id':
-                                                            sec_context.encrypt(lookup_val, AccountEmails)})
+                                                                sec_context.encrypt(lookup_val, AccountEmails)})
         except Exception as e:
             collection_not_found = re.match(r"^relation .+ does not exist", e.message)
             if collection_not_found:
@@ -4090,8 +4095,8 @@ class EmailActivityScore(UIPMap):
         if account:
             EmailsCSVClass = CSVDataClass('activity_email', 'messages')
             criteria = {'object.eid': {'$in':
-                                       [sec_context.encrypt(email[1], EmailsCSVClass)
-                                        for email in account.emails]}}
+                                           [sec_context.encrypt(email[1], EmailsCSVClass)
+                                            for email in account.emails]}}
             emails = EmailsCSVClass.getAll(criteria=criteria)
 
             # create a record of events in the history of emails
@@ -4141,7 +4146,7 @@ class EmailActivityScore(UIPMap):
         for i, cliff in enumerate(self.cliffs):
             if cliff is None:
                 continue
-            bit_mask = np.array([0] * self.num_feats * (i) +
+            bit_mask = np.array([0] * self.num_feats * i +
                                 [1] * self.num_feats +
                                 [0] * self.num_feats * (len(self.cliffs) - i - 1))
             email_events.append([ts + cliff, -1 * bit_mask * base_vector])
@@ -4150,8 +4155,10 @@ class EmailActivityScore(UIPMap):
     def score_activity(self, curr_val):
         if not np.any(curr_val):
             return 0
-        def sigmoid(x, x0=0, k=1,):
+
+        def sigmoid(x, x0=0, k=1, ):
             return 1. / (1. + np.exp(-k * (x - x0)))
+
         raw_score = sigmoid(np.inner(curr_val, self.betas), self.x0, self.k)
         return 1 + np.digitize([raw_score], self.bins)[0]
 
@@ -4200,7 +4207,7 @@ class ActivityCounts(UIPMap):
                                      relativedelta.relativedelta(days=-days_history))
 
         account = AccountEmails.getBySpecifiedCriteria({'object.account_id':
-                                                        sec_context.encrypt(lookup_val, AccountEmails)})
+                                                            sec_context.encrypt(lookup_val, AccountEmails)})
 
         activity_count = 0
         if account and account.emails:
@@ -4253,7 +4260,7 @@ class RangeFilter(UIPMap):
         if min_replace is not None:
             if max_replace is not None:
                 conv_hist = [[ts, min_replace if val < min_val
-                              else val if val <= max_val else max_replace] for ts, val in orig_hist]
+                else val if val <= max_val else max_replace] for ts, val in orig_hist]
             else:
                 conv_hist = [[ts, min_replace if val < min_val else val]
                              for ts, val in orig_hist if val <= max_val]
@@ -4305,8 +4312,8 @@ class RangeFilter2(UIPMap):
             in between min and max. The values less than min and greater than max will be replaced by min_replace and max_replace
             respectively if they are provided else discarded.
         '''
-#         if len(self.in_flds) < 1:
-#             raise Exception('range filter requires at least one field')
+        #         if len(self.in_flds) < 1:
+        #             raise Exception('range filter requires at least one field')
         if 'fld_list' not in self.config:
             raise Exception('no fld_list specified')
 
@@ -4326,7 +4333,7 @@ class RangeFilter2(UIPMap):
                 conv_hist = []
                 if max_replace is not None:
                     conv_hist = [[ts, min_replace if val < min_val
-                                  else val if val <= max_val else max_replace] for ts, val in orig_hist]
+                    else val if val <= max_val else max_replace] for ts, val in orig_hist]
                 else:
                     conv_hist = [[ts, min_replace if val < min_val else val]
                                  for ts, val in orig_hist if val <= max_val]
@@ -4390,7 +4397,7 @@ class CalulateCloseDatePushes(UIPMap):
             raise Exception('calculate_closedate_pushes only supports 1 date field at a time')
 
         closedate_fld = self.in_flds[0]
-#         stage_field_name = self.config.get(u'stage_field_name', u'Stage')
+        #         stage_field_name = self.config.get(u'stage_field_name', u'Stage')
         base_out_fld = 'CloseDate'
 
         MAX_YEAR, MIN_YEAR = 2050, 0
@@ -4420,16 +4427,16 @@ class CalulateCloseDatePushes(UIPMap):
             net_pushes_val = [[close_date_list[0][0], 0]]
 
             for i, [ts, cd] in enumerate(close_date_list[:-1]):
-                if cd < close_date_list[i+1][1]:
+                if cd < close_date_list[i + 1][1]:
                     push_count += 1
                     net_count += 1
-                    total_pushes_val.append([close_date_list[i+1][0], push_count])
-                    net_pushes_val.append([close_date_list[i+1][0], net_count])
+                    total_pushes_val.append([close_date_list[i + 1][0], push_count])
+                    net_pushes_val.append([close_date_list[i + 1][0], net_count])
                 else:
                     pull_count += 1
                     net_count -= 1
-                    total_pulls_val.append([close_date_list[i+1][0], pull_count])
-                    net_pushes_val.append([close_date_list[i+1][0], net_count])
+                    total_pulls_val.append([close_date_list[i + 1][0], pull_count])
+                    net_pushes_val.append([close_date_list[i + 1][0], net_count])
 
             uip_obj.featMap.update({
                 total_pushes_name: total_pushes_val,
@@ -4437,7 +4444,6 @@ class CalulateCloseDatePushes(UIPMap):
                 net_pushes_name: net_pushes_val
             })
             modified_fields += [total_pushes_name, total_pulls_name, net_pushes_name]
-
 
         if self.config.get(u'calculate_total_delay', True):
             new_fld_name = '{}_{}'.format(base_out_fld, 'total_delay')
@@ -4458,7 +4464,7 @@ class CalulateCloseDatePushes(UIPMap):
 
             for (ts, cd) in close_date_list[1:]:
                 dt2 = xl2datetime(cd)
-                months_pushed = (dt2.year - dt1.year)*12 + dt2.month - dt1.month
+                months_pushed = (dt2.year - dt1.year) * 12 + dt2.month - dt1.month
                 new_fld_val.append([ts, months_pushed])
 
             uip_obj.featMap[new_fld_name] = new_fld_val
@@ -4486,7 +4492,6 @@ class CalulateCloseDatePushes(UIPMap):
 
             uip_obj.featMap[new_fld_name] = new_fld_val
             modified_fields.append(new_fld_name)
-
 
         if self.config.get('__COMPRESS__', True):
             return modified_fields
@@ -4544,7 +4549,7 @@ class ChangeCount(UIPMap):
         prev_ts = fld_recs[0][0]
 
         for idx, [ts, val] in enumerate(fld_recs[1:]):
-            if ts < prev_ts + self.config.get('ignore_threshold', 1)/24.0:
+            if ts < prev_ts + self.config.get('ignore_threshold', 1) / 24.0:
                 continue
             if val > prev_val:
                 increase_ct += 1
@@ -4558,8 +4563,9 @@ class ChangeCount(UIPMap):
             prev_ts = ts
             prev_val = val
 
-        new_uip_recs  = {
-            fld + '_' + change: dtls for change, dtls in change_dict.items() if change in self.config.get('changes', change_types)
+        new_uip_recs = {
+            fld + '_' + change: dtls for change, dtls in change_dict.items() if
+            change in self.config.get('changes', change_types)
         }
 
         uip_obj.featMap.update(new_uip_recs)

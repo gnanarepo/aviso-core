@@ -110,8 +110,7 @@ def _parse(val, fn, parser_fallback_lambda=None):
         try:
             return eval(fn)(val)
         except Exception as e:
-            logger.warning(
-                'Not a valid Parser function, tried as lambda function but failed. Exception %s' % (e))
+            logger.warning(f'Not a valid Parser function, tried as lambda function but failed. Exception {e}')
         raise Exception('The Parser function ' + fn + ' is not defined in the maps')
     else:
         try:

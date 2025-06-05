@@ -90,7 +90,7 @@ class SourceMap:
                     for skey, _ in schema.items():
                         if skey not in fld_defs.keys():
                             if skey == 'in_fld':
-                                if ('val_fld' in fld_defs.keys()):
+                                if 'val_fld' in fld_defs.keys():
                                     record['in_fld'] = fld_defs['val_fld']
                             elif skey == 'out_fld':
                                 record[skey] = key
@@ -145,7 +145,7 @@ class SourceMap:
         new_config = self.config_input
         other_attr = map_details["attributes"]
         new_config["all_fields"] = other_attr["all_fields"]['value']
-        if ('reduce_maps' in self.config_input.keys()):
+        if 'reduce_maps' in self.config_input.keys():
             if "id_fields" in self.config_input.keys():
                 new_config['id_fields'] = other_attr["id_fields"]['value']
         else:
@@ -200,7 +200,7 @@ class SourceMap:
         if len(args_list) < min_list_size:
             raise GnanaError(
                 'Excepting at least %s arguments, found %s' % (min_list_size, len(args_list)))
-        return (idkey, args_list, config_type)
+        return idkey, args_list, config_type
 
     def __init__(self, fn_def_params, config, stage_ds=None):
         params = self.extract_params(
@@ -295,7 +295,7 @@ class SourceMap:
                 uip_obj.prepare_errors[uip_obj.ID].append(msg)
 
         for k in features:
-            if ((self.all_fields and k not in self.exclude_list) or k in in_fld_map):
+            if (self.all_fields and k not in self.exclude_list) or k in in_fld_map:
                 try:
                     if k in in_fld_map:
                         for in_fld_rec in in_fld_map[k]:
@@ -369,7 +369,7 @@ class AggregateSourceMap(SourceMap):
 
     def get_records(self):
         for extid, uip_obj_list in self.uip_reduce_dict.iteritems():
-            yield (extid, uip_obj_list)
+            yield extid, uip_obj_list
 
     def _aggregate(self, extid, uip_obj_list):
         if self.reln_join_field not in self.id_fields:
@@ -450,17 +450,17 @@ class AggregateSourceMap(SourceMap):
         if fn not in available_fns:
             raise KeyError(
                 'The function ' + fn + ' is not defined in the reduce_maps')
-        return (available_fns[fn])
+        return available_fns[fn]
 
     def time_series_reduce(self, out_rec, uip_obj_list, config):
-        ''' Reduce list of uip_objects into one single uip_object, by creating a timeseries on the value_field.
+        """ Reduce list of uip_objects into one single uip_object, by creating a timeseries on the value_field.
          Fields that need to be in config:
          val_fld : the latest value of this field will be used to create values in the timeseries
          ts_fld : the latest value of this field will be used to make timestamps in the timeseries. If there
              are multiple records with same latest value for this field, the record with the more recent creation
              date will be used. It is expected to be in excel float format (use yyyymmdd_to_xl to convert if needed).
          out_fld : this contain the name of the timeseries field which will exist on the uip record which results
-             from the reduce'''
+             from the reduce"""
 
         val_fld = config["val_fld"]
         ts_fld = config["ts_fld"]

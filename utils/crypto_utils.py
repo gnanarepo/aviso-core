@@ -42,7 +42,7 @@ class Wallet:
             f = open(wallet,'r')
             for kline in f:
                 (n,k)=kline.split('=',1)
-                if(k):
+                if k:
                     keys[n]=k
             f.close()
         except IOError as e:

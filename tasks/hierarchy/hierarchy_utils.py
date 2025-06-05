@@ -123,7 +123,7 @@ def make_valid_crm_id(crm_id):
 
 
 def explode_node(node, user_id=None):
-    ''' Explodes a self-describing node identifier into a dictionary with fields and vals.'''
+    """ Explodes a self-describing node identifier into a dictionary with fields and vals."""
     ks, vs = [x.split('~') for x in node.split('~::~')]
 
     # dont include new mongo/aryaka style top hierarchy levels
@@ -161,7 +161,7 @@ def in_hierarchy(hierarchy, node, root_dim=None):
     elif node.startswith(hierarchy):
         return True
     elif node == '.~::~summary':
-        return root_dim == None or hierarchy == root_dim
+        return root_dim is None or hierarchy == root_dim
     elif node.startswith('.'):
         return node.endswith(hierarchy)
     return False
@@ -326,7 +326,7 @@ def get_toplevel_parent(node):
     else:
         rev = v_parts[:-1][::-1]
 
-        if (len(rev) != 1):
+        if len(rev) != 1:
             gen = (i for i, val in enumerate(rev) if val != rev[i + 1] and rev[i + 1])
             idx = next(gen) + 1
             parent_node = '~'.join(k.split('~')[:-idx]) + '~::~' + '~'.join(v_parts[:-idx])
@@ -345,7 +345,7 @@ def get_ancestors(node, root_dim=None):
     try:
         flds, vals = [x.split('~') for x in seg_and_seg_val]
     except ValueError as e:
-        raise Exception('Invalid leaf: %s. Msg: %s' % (seg_and_seg_val, e.message))
+        raise Exception('Invalid leaf: %s. Msg: %s' % (seg_and_seg_val, e))
     return ancestors + ['{}~::~{}'.format('~'.join(flds[0:i + 1]), '~'.join(vals[0:i + 1]))
                         for i, _fld in enumerate(flds)]
 
@@ -377,7 +377,7 @@ def make_display_name(node, display_mappings):
     # TODO: retire get_name, replace with this
     try:
         seg, segtype = node.split('~::~')
-        mapped_segs = [display_mappings.get(node, node) for node in (segtype).split('~')]
+        mapped_segs = [display_mappings.get(node, node) for node in segtype.split('~')]
         full_name = '~'.join(mapped_segs)
         display_name = mapped_segs[-1]
     except ValueError:

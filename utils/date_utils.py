@@ -62,9 +62,9 @@ class EpochClass:
         return delta.days + (float(delta.seconds) / (3600 * 24))
 
     def as_tenant_xl_int(self):
-        '''
+        """
         Useful for passing to the holidays which are defined as tenant excel date integers
-        '''
+        """
         d = self.as_datetime()
         e = datetime(
             d.year, d.month, d.day, d.hour, d.minute, d.second, d.microsecond)
@@ -162,7 +162,7 @@ class EpochClass:
             whole_days = tdelta.days * 86400
             seconds = tdelta.seconds
             microseconds = tdelta.microseconds
-            result_1 = EpochClass(self.ts + (whole_days))
+            result_1 = EpochClass(self.ts + whole_days)
             # check to see if we have to add or subtract hours due to daylight
             # saving
             hour_diff = (result_1.as_datetime().hour - as_dt.hour) % 24
@@ -187,7 +187,7 @@ class EpochClass:
             whole_days = tdelta.days * 86400
             seconds = tdelta.seconds
             microseconds = tdelta.microseconds
-            result_1 = EpochClass(self.ts + (whole_days))
+            result_1 = EpochClass(self.ts + whole_days)
             # check to see if we have to add or subtract hours due to daylight
             # saving
             hour_diff = (result_1.as_datetime().hour - as_dt.hour) % 24
@@ -435,7 +435,7 @@ def periods_for_year(y, quarters, period_type, tzinfo,
 
             bow = boq
             counter = 1
-            while(bow < eoq):
+            while bow < eoq:
                 month_range = filter(lambda x: x != 0, range(start_month, end_month))
                 for j, m_month in enumerate(month_range):
                     mnemonic = "%04dM%02d" % (y, i*3 + j + 1)
@@ -446,7 +446,7 @@ def periods_for_year(y, quarters, period_type, tzinfo,
                     eom = min(eom, eoq)
 
                     week = 1
-                    while(bow < eom):
+                    while bow < eom:
                         eow = bow + timedelta(days=(week_start - bow.weekday() + 7) % 7 or 7)
                         eow = get_date_time_for_extended_month(eow.year, eow.month, tzinfo, day=eow.day)
                         eow = min(eow-onems, eoq)
@@ -587,9 +587,9 @@ def prev_period_by_epoch(epoch_time, period_type='Q', skip=1, count=1):
 
 
 def is_same_day(first, second):
-    '''
+    """
     Accepts two dates in epoch and tells whether they fall on the same day.
-    '''
+    """
     if first is None or second is None:
         return False
     first_dt = first.as_datetime()
@@ -873,10 +873,10 @@ def period_details_range(a_datetime_begin=None, a_datetime_end=None, period_type
     return periods
 
 def is_valid_mnemonic(mnemonic, period_type='Q'):
-    '''
+    """
     Accepts a mnemonic string and returns whether its a valid mnemonic or not.
     period_type = Q/M/CM/Y
-    '''
+    """
     if period_type == 'Q':
         regex = "^\d{4}Q[1-4]$"
     elif period_type == 'M':
@@ -1163,7 +1163,7 @@ def get_a_date_time_as_float_some_how(date_like_thing):
     # Convert modified date from string to an excel float
     try:
         a_date = float(date_like_thing)
-        if (a_date > 100000):
+        if a_date > 100000:
             a_date = EpochClass.from_epoch(a_date).as_xldate()
     except TypeError:
         # TODO: Move the type error to the exception list below so that
@@ -1173,7 +1173,7 @@ def get_a_date_time_as_float_some_how(date_like_thing):
             "Unable to determine the date from %s" + str(date_like_thing))
         logger.error('Type of the argument is %s', str(type(date_like_thing)))
         return None
-    except (ValueError):
+    except ValueError:
         try:
             a_date = datetime2xl(
                 EpochClass.from_string(cleanmmddyy(date_like_thing), '%m/%d/%Y').as_datetime())

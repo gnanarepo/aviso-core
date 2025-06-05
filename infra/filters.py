@@ -404,7 +404,7 @@ def upload_user_level_filter(filter_data, db=None,collection=FILTS_COLL):
             filter_id = filter_data['filter_id']
             filters_collection.update_one({"filter_id": filter_id, "user": sec_context.login_user_name}, {'$set': record})
     except Exception as _err:
-        errors.append({'filter': filter_data, 'error': _err.message})
+        errors.append({'filter': filter_data, 'error': _err})
     return errors
 
 
@@ -937,10 +937,7 @@ def _range_func_filter(fltr, filter_type):
     if len(fltr['val'])>0:
         temp = []
         for val in fltr['val']:
-            temp_filter = {}
-            temp_filter['val'] = [val]
-            temp_filter['key'] = fltr['key']
-            temp_filter['op'] = fltr['op']
+            temp_filter = {'val': [val], 'key': fltr['key'], 'op': fltr['op']}
             temp.append(temp_filter)
         fltr = copy.deepcopy(temp)
 
@@ -1036,7 +1033,7 @@ def _valid_filter(desc):
     try:
         py_filt({}, None, None)
     except Exception as e:
-        raise FilterError('cant evaluate filter: {}, error: {}'.format(desc, e.message))
+        raise FilterError('cant evaluate filter: {}, error: {}'.format(desc, e))
     return True
 
 

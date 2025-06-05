@@ -533,11 +533,7 @@ class CSVVersionData(CSVData):
             return ret
 
         # call the csv upload process
-        kwargs = {}
-        kwargs['csv_name'] = cls.csv_name
-        kwargs['csv_type'] = cls.csv_type
-        kwargs['dd_type'] = 'complete'
-        kwargs['static_type'] = 'complete'
+        kwargs = {'csv_name': cls.csv_name, 'csv_type': cls.csv_type, 'dd_type': 'complete', 'static_type': 'complete'}
         return cls.truncate(criteria, **kwargs)
 
     @classmethod
@@ -653,13 +649,13 @@ class CSVVersionData(CSVData):
 
 
 def CSVDataClass(csv_type, csv_name, used_for_write=False):
-    '''
+    """
     csv_type : The type of csv. Ex : epf_cache, dtfo_cache
     csv_name : Equivalent to csv suffix. Appended at the
                end of the collection. Ex : forecast
     used_for_write : TO indicate whether CSVDataClass
                      is being used for reads or writes.
-    '''
+    """
     # Get the configuration for this category
     tenant = sec_context.details
     csv_type_info = tenant.get_config('csv_data', csv_type)
@@ -801,7 +797,7 @@ class CSVVersions(Model):
         # Delete data from Promotion table
         # Delete version from version table
         # Delete version data from all csv tables
-        prefix = "%s._csvdata." % (sec_context.name)
+        prefix = f"{sec_context.name}._csvdata."
         csv_col_list = list(x for x in gnana_db2.collection_names(prefix))
         t = sec_context.details
         for col in csv_col_list:
@@ -934,7 +930,7 @@ class CSVPromotionData(Model):
         # Clear data belongs to snapshots which are higher than the current snapshot
         partial = sec_context.csv_version_info.get('partial', False)
         table_name = str(cls.getCollectionName()).replace(".", "$")
-        statement = 'delete from "%s" ' % (table_name)
+        statement = f'delete from "{table_name}" '
         statement += "where csv_type='%s' and csv_name='%s' and snapshot>='%s'" % (csv_type,
                                                                                    csv_name,
                                                                                    snapshot)
@@ -942,7 +938,7 @@ class CSVPromotionData(Model):
             if snapshot:
                 gnana_db2.executeDML(cls.getCollectionName(), statement)
         except Exception as e:
-            logger.info("Got exception in clearing data %s" % (e.message))
+            logger.info(f"Got exception in clearing data {e}")
 
         tenant = sec_context.details
         csv_type_info = tenant.get_config('csv_data', csv_type)
@@ -977,9 +973,9 @@ class CSVPromotionData(Model):
         def get_info(ct=None):
             csv_info = {}
             if ct is None:
-                prefix = "%s._csvdata." % (sec_context.name)
+                prefix = f"{sec_context.name}._csvdata."
             else:
-                prefix = "%s._csvdata.%s." % (sec_context.name, ct)
+                prefix = f"{sec_context.name}._csvdata.{ct}."
             csv_col_list = list(x for x in gnana_db2.collection_names(prefix))
             for col in csv_col_list:
                 csv_type = col.split('.')[3]

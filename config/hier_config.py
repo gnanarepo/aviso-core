@@ -532,7 +532,7 @@ class DealFactory:
         return deal
 
     def rewind_deal(self, deal, timestamp):
-        new_deal = {k: v for k, v in deal.iteritems()}
+        new_deal = {k: v for k, v in deal.items()}
         if deal.get('update_date') == timestamp:
             return new_deal
 
@@ -583,7 +583,7 @@ class DealFactory:
         return new_deal
 
     def fastforward_deal(self, deal, timestamp):
-        new_deal = {k: v for k, v in deal.iteritems()}
+        new_deal = {k: v for k, v in deal.items()}
         if deal.get('update_date') == timestamp:
             return new_deal
 
@@ -734,14 +734,14 @@ class CollabForecastBuilder(HierarchyBuilder):
             users = self._fetch_latest_users()
 
         user_to_role = {x: y[self.ROLE_ID]
-                        for (x, y) in users.iteritems() if y[self.ROLE_ID]}
+                        for (x, y) in users.items() if y[self.ROLE_ID]}
         role_to_parent = {x: y[self.PARENT_ROLE_ID]
-                          for (x, y) in roles.iteritems() if y.get(self.PARENT_ROLE_ID)}
+                          for (x, y) in roles.items() if y.get(self.PARENT_ROLE_ID)}
         role_to_fcst_user = {x: y[self.FCST_USER_ID]
-                             for (x, y) in roles.iteritems() if y.get(self.FCST_USER_ID)}
+                             for (x, y) in roles.items() if y.get(self.FCST_USER_ID)}
 
-        labels = {x: y[self.NAME] for x, y in users.iteritems()}
-        for role, dtls in roles.iteritems():
+        labels = {x: y[self.NAME] for x, y in users.items()}
+        for role, dtls in roles.items():
             if dtls[self.FCST_USER_ID] in users:
                 # We shouldn't only get the ones that are in users (what if they're deleted).
                 user_name = users[role_to_fcst_user[role]][self.NAME]
@@ -750,10 +750,10 @@ class CollabForecastBuilder(HierarchyBuilder):
                     labels[role] += ' (%s)' % (dtls[self.NAME])
                 labels[dtls[self.FCST_USER_ID]] = "%s's Own Opportunities" % user_name
 
-        non_forecast_users = {ID for ID, x in users.iteritems()
+        non_forecast_users = {ID for ID, x in users.items()
                               if x[self.FORECAST_ENABLED] == 'false'}
         bad_users = non_forecast_users  # | inactive_users (inactives are included in collab forecasting)
-        user_to_role = {user: role for user, role in user_to_role.iteritems()
+        user_to_role = {user: role for user, role in user_to_role.items()
                         if user not in bad_users}
 
         node_to_parent = {x: role_to_parent[x]
@@ -761,12 +761,12 @@ class CollabForecastBuilder(HierarchyBuilder):
                           if x in role_to_fcst_user}
 
         node_to_parent.update({user: role_to_parent[role]
-                               for user, role in user_to_role.iteritems()
+                               for user, role in user_to_role.items()
                                if role in role_to_parent and role_to_parent[role] in role_to_fcst_user
                                })
 
         node_to_parent.update({user: role
-                               for role, user in role_to_fcst_user.iteritems()
+                               for role, user in role_to_fcst_user.items()
                                })
 
         # Create nodes for FORECAST USERS
@@ -777,8 +777,8 @@ class CollabForecastBuilder(HierarchyBuilder):
 
         node_to_parent.update({root: None for root in roots})
 
-        labels = {x: y for (x, y) in labels.iteritems() if x in node_to_parent}
-        node_to_parent = {x: y for (x, y) in node_to_parent.iteritems() if x in labels}
+        labels = {x: y for (x, y) in labels.items() if x in node_to_parent}
+        node_to_parent = {x: y for (x, y) in node_to_parent.items() if x in labels}
 
         return node_to_parent, labels
 
@@ -859,10 +859,10 @@ class NoDrilldownBuilder(DrilldownBuilder):
 
         dd_node_to_parent.update({'#'.join(['!', node]): '#'.join(['!', parent])
         if parent else root
-                                  for node, parent in node_to_parent.iteritems()})
+                                  for node, parent in node_to_parent.items()})
 
         dd_labels.update({'#'.join(['!', node]): label
-                          for node, label in labels.iteritems()})
+                          for node, label in labels.items()})
 
         return dd_node_to_parent, dd_labels
 
@@ -885,11 +885,11 @@ class HierOnlyBuilder(DrilldownBuilder):
 
         dd_node_to_parent.update({'#'.join([self.drilldown, node]): '#'.join([self.drilldown, parent])
         if parent else root
-                                  for node, parent in node_to_parent.iteritems()})
+                                  for node, parent in node_to_parent.items()})
 
         dd_labels.update({'#'.join([self.drilldown, node]): label
         if node_to_parent.get(node) is not None or is_lead_service(service) else self.drilldown_label
-                          for node, label in labels.iteritems()})
+                          for node, label in labels.items()})
 
         return dd_node_to_parent, dd_labels
 
@@ -914,7 +914,7 @@ class DealBottomBuilder(DrilldownBuilder):
         deal_fields = self.config.drilldown_deal_fields[self.drilldown]
         drilldown_field_values = self.deal_field_values['|'.join(deal_fields)]
 
-        for node, parent in node_to_parent.iteritems():
+        for node, parent in node_to_parent.items():
             dd_node = '#'.join([self.drilldown, '', node])
             if parent:
                 dd_node_to_parent[dd_node] = '#'.join([self.drilldown, '', parent])
@@ -961,12 +961,12 @@ class DealTopBuilder(DrilldownBuilder):
         dd_labels = {self.root: ' '.join([self.drilldown_label, 'Root']), not_in_hier: 'Not in Hierarchy'}
         node_to_parent, self.labels = self.get_node_to_parent_and_labels()
 
-        roots = {node for node, parent in node_to_parent.iteritems() if not parent}
+        roots = {node for node, parent in node_to_parent.items() if not parent}
         self.hier_root = list(roots)[0]
         if len(roots) == 1:
             self.old_root = roots.pop()
             node_to_parent.pop(self.old_root)
-            roots = {node for node, parent in node_to_parent.iteritems() if parent == self.old_root}
+            roots = {node for node, parent in node_to_parent.items() if parent == self.old_root}
             self.old_root = '##'.join([self.drilldown, self.old_root])
             dd_node_to_parent[self.old_root] = self.root
             dd_labels[self.old_root] = self.drilldown_label
@@ -990,7 +990,7 @@ class DealTopBuilder(DrilldownBuilder):
             # add existing hierarchy to the bottom of tree top
             tree_field_values = tree_top_leaf.split('#')[-2]
 
-            for node, parent in node_to_parent.iteritems():
+            for node, parent in node_to_parent.items():
                 if node in roots:
                     continue
                 else:
@@ -1019,7 +1019,7 @@ class DealTopBuilder(DrilldownBuilder):
                                                                 for field, val in drilldown_values]), node]): node for
                                 node in nodes}
                     node_to_parent.update({child: parent for child in children})
-                    labels.update({child: self.labels[node] for child, node in children.iteritems()})
+                    labels.update({child: self.labels[node] for child, node in children.items()})
                 else:
                     node_to_parent[child] = parent
                     labels[child] = child.split('#')[1].split('|')[-1]
@@ -1049,7 +1049,7 @@ class DealOnlyBuilder(DealTopBuilder):
         if self.config.versioned_hierarchy:
             timestamp, _ = get_period_begin_end(self.period)
         node_to_parent, labels = fetch_node_to_parent_mapping_and_labels(timestamp, drilldown=False, period=self.period)
-        roots = {node for node, parent in node_to_parent.iteritems() if not parent}
+        roots = {node for node, parent in node_to_parent.items() if not parent}
         hier_root = list(roots)[0]
         leaves = set(node_to_parent.keys()) - set(node_to_parent.values())
         node_to_parent = {leaf: hier_root for leaf in leaves}
@@ -1076,13 +1076,13 @@ class LeadHierarchyBuilder(HierarchyBuilder):
         users = self._fetch_latest_users()
 
         user_to_role = {x: y[self.ROLE_ID]
-                        for (x, y) in users.iteritems() if y[self.ROLE_ID]}
+                        for (x, y) in users.items() if y[self.ROLE_ID]}
         role_to_parent = {x: y[self.PARENT_ROLE_ID]
-                          for (x, y) in roles.iteritems() if y.get(self.PARENT_ROLE_ID)}
+                          for (x, y) in roles.items() if y.get(self.PARENT_ROLE_ID)}
 
-        labels = {x: y[self.NAME] for x, y in roles.iteritems()}
+        labels = {x: y[self.NAME] for x, y in roles.items()}
 
-        for user, dtls in users.iteritems():
+        for user, dtls in users.items():
             if dtls[self.ROLE_ID] in roles:
                 user_name = dtls[self.NAME]
                 labels[user] = user_name
@@ -1091,7 +1091,7 @@ class LeadHierarchyBuilder(HierarchyBuilder):
                           for x in role_to_parent}
 
         node_to_parent.update({user: role
-                               for user, role in user_to_role.iteritems()
+                               for user, role in user_to_role.items()
                                })
 
         node_to_parent = HierarchyBuilder.prune_above_roots(node_to_parent, self.config.forced_roots)
@@ -1100,8 +1100,8 @@ class LeadHierarchyBuilder(HierarchyBuilder):
 
         node_to_parent.update({root: None for root in roots})
 
-        labels = {x: y for (x, y) in labels.iteritems() if x in node_to_parent}
-        node_to_parent = {x: y for (x, y) in node_to_parent.iteritems() if x in labels}
+        labels = {x: y for (x, y) in labels.items() if x in node_to_parent}
+        node_to_parent = {x: y for (x, y) in node_to_parent.items() if x in labels}
 
         return node_to_parent, labels
 
@@ -1249,7 +1249,7 @@ class HierConfig(BaseConfig):
             dict -- {drilldown: drilldown builder}
         """
         return {drilldown: dd_dtls['drilldown_builder']
-                for drilldown, dd_dtls in self.config.get('drilldowns', {}).iteritems()}
+                for drilldown, dd_dtls in self.config.get('drilldowns', {}).items()}
 
     @cached_property
     def drilldown_labels(self):
@@ -1260,7 +1260,7 @@ class HierConfig(BaseConfig):
             dict -- {drilldown: label}
         """
         return {drilldown: dd_dtls.get('label', drilldown)
-                for drilldown, dd_dtls in self.config.get('drilldowns', {}).iteritems()}
+                for drilldown, dd_dtls in self.config.get('drilldowns', {}).items()}
 
     @cached_property
     def drilldown_deal_fields(self):
@@ -1271,7 +1271,7 @@ class HierConfig(BaseConfig):
             dict -- {drilldown: [deal fields]}
         """
         return {drilldown: dd_dtls.get('deal_fields', [])
-                for drilldown, dd_dtls in self.config.get('drilldowns', {}).iteritems()}
+                for drilldown, dd_dtls in self.config.get('drilldowns', {}).items()}
 
     @cached_property
     def deal_only_drilldowns(self):
@@ -1281,7 +1281,7 @@ class HierConfig(BaseConfig):
         Returns:
             set -- {drilldowns}
         """
-        return {drilldown for drilldown, dd_dtls in self.config.get('drilldowns', {}).iteritems()
+        return {drilldown for drilldown, dd_dtls in self.config.get('drilldowns', {}).items()
                 if dd_dtls['drilldown_builder'] == 'deal_only'}
 
     @cached_property
@@ -1292,7 +1292,7 @@ class HierConfig(BaseConfig):
         Returns:
             dict -- {drilldowns: number of hierarchy levels to keep}
         """
-        return {drilldown: dd_dtls['num_levels'] for drilldown, dd_dtls in self.config.get('drilldowns', {}).iteritems()
+        return {drilldown: dd_dtls['num_levels'] for drilldown, dd_dtls in self.config.get('drilldowns', {}).items()
                 if dd_dtls['drilldown_builder'] == 'deal_partial_hier'}
 
     @cached_property
@@ -1353,7 +1353,7 @@ class HierConfig(BaseConfig):
             gbm_dd_config = get_nested(ds, ['models', 'common', 'config', 'viewgen_config'], {})
             uipfields = set(get_nested(ds, ['params', 'general', 'uipfield'], []))
 
-        for dd, dd_dtls in drilldowns.iteritems():
+        for dd, dd_dtls in drilldowns.items():
             dd_builder = dd_dtls.get('drilldown_builder')
             if dd_builder not in DRILLDOWN_BUILDERS:
                 return False, 'drilldown builder: {} not in available drilldown builders: {}'.format(dd_builder, sorted(DRILLDOWN_BUILDERS.keys()))

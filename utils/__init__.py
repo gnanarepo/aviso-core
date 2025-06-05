@@ -16,7 +16,7 @@ else:
 
 
 def update_dict(dict1, dict2):
-    ''' Update dict1 with dict2, and remove any item that is None safely '''
+    """ Update dict1 with dict2, and remove any item that is None safely """
     for k1, v1 in dict2.items():
         if v1 is not None:
             dict1[k1] = v1
@@ -27,7 +27,7 @@ TRUE_VALUES = {'true', '1', 'yes', 'yeah', 'si',
                'youbet', 'good', 'positive'}
 
 def is_true(bool_like):
-    if(isinstance(bool_like, str)):
+    if isinstance(bool_like, str):
         return bool_like.lower() in TRUE_VALUES
     if bool_like:
         return True
@@ -42,15 +42,15 @@ class GnanaError(Exception):
         except ValueError:
             raise Exception("Unable to create GnanaError due to bad http_status")
 
-        if(isinstance(info, str)):
+        if isinstance(info, str):
             self.details['_error'] = info
-        elif(isinstance(info, dict)):
+        elif isinstance(info, dict):
             self.details.update(info)
         else:
             self.details['_additional_info'] = info
 
         # Supply a default error
-        if(not '_error' in self.details):
+        if not '_error' in self.details:
             self.details['_error'] = self.__class__.__name__
         # Added message to support default usage of exception in logs
         self.message = str(self.details)
@@ -73,7 +73,7 @@ def diff_rec(left,
              ignore_keys={},
              comp_mode='dp',
              precision=6):
-    '''
+    """
     Given two generic structures left and right, this will return
     a map showing their diff. It uses recursive drill down, so do
     not use on structures which have big depth!
@@ -93,7 +93,7 @@ def diff_rec(left,
         if comp_mode='sf' then significant figures to round to before comparison
         if comp_mode='dp' then decimal places to round to before comparison
         if comp_mode='pc' then percentage change required to trigger diff
-    '''
+    """
     ignore_keys = set(ignore_keys)
 
     def diff_rec_(left,
@@ -144,8 +144,8 @@ def diff_rec(left,
                 if left != right:
                     if comp_mode == 'sf':
                         try:
-                            left_num = ('%%.%dg' % (int(precision))) % (left)
-                            right_num = ('%%.%dg' % (int(precision))) % (right)
+                            left_num = ('%%.%dg' % (int(precision))) % left
+                            right_num = ('%%.%dg' % (int(precision))) % right
                             if left_num != right_num:
                                 diffs = (left, right, right - left)
                         except:
@@ -165,7 +165,7 @@ def diff_rec(left,
                         except:
                             diffs = (left, right)
                     else:
-                        raise Exception("comp_mode='%s' not supported" % (comp_mode))
+                        raise Exception("comp_mode='%s' not supported" % comp_mode)
             else:
                 diffs = (left, right)
         else:
@@ -186,5 +186,5 @@ def memory_usage_resource():
             resource.RUSAGE_SELF).ru_maxrss / rusage_denom
         return mem
     except Exception as e:
-        logger.warn('Memrory usage failed with exception %s' % e)
+        logger.warning('Memrory usage failed with exception %s' % e)
         return -1

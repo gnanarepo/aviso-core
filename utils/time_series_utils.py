@@ -139,10 +139,10 @@ class LineItemEventAggregator(EventAggregator):
             raise Exception('Unknown event type.')
 
     def handle_creation(self, event):
-        '''
+        """
         Adjust total amount.
         Add this record the active sets for each applicable grp.
-        '''
+        """
         ID = event.data
         li_rec = self.recs[ID]
         # TODO: Do this in a way that allows for changing group vals.
@@ -193,10 +193,10 @@ class LineItemEventAggregator(EventAggregator):
         pass
 
     def handle_deletion(self, event):
-        '''
+        """
         Reduce total amount by current amount for the li.
         Remove li from all relevant groups. amount.
-        '''
+        """
         _ts, _type, ID = event
 
         li_rec = self.recs[ID]
@@ -222,11 +222,11 @@ class LineItemEventAggregator(EventAggregator):
         self.processed_deletes.add(ID)
 
     def try_finalize(self, force=False):
-        '''
+        """
         Every time the next event's timestamp is ahead, we write our current state to the out_flds.
-        '''
+        """
         self.output_featmap[self.tot_amt_fld].append([self.until, self.tot_amt])
-        for grp, grp_dtls in self.active_set.iteritems():
+        for grp, grp_dtls in self.active_set.items():
             try:
                 grp_amt = sum(grp_dtls.values())
             except:
@@ -316,12 +316,12 @@ class SplitsEventAggregator(EventAggregator):
             raise Exception('Unknown event type.')
 
     def get_splt_types(self, splt_rec):
-        '''
+        """
         Return splt type values for a split record. If there is a splt_type field,
         just return the value in that field. Otherwise return something like
         ['','_ValA','_ValA_ValB'] where ValA and ValB are the values in the two
         groupby fields.
-        '''
+        """
         if self.grpby_flds:
             grp_vals = [splt_rec.getLatest(fld).replace(' ', '')
                         for fld in self.grpby_flds]
@@ -335,21 +335,21 @@ class SplitsEventAggregator(EventAggregator):
             return [splt_rec.getLatest(self.type_fld)]
 
     def handle_creation(self, event):
-        '''
+        """
         adjust total percentage in self.tot_splt_pct,
         insert ID into self.active_set
         update self.tot_amt
-        '''
+        """
         splt_rec = self.recs[event.data]
         splt_types = self.get_splt_types(splt_rec)
 
         new_actv_dict = {out_fld: splt_rec.featMap.get(in_fld, [[splt_rec.created_date, 'N/A']])[-1][1]
                          for (out_fld, in_fld) in self.splt_flds}
         try:
-	    splt_amt = try_float(splt_rec.featMap[self.splt_amt_fld][0][1])
+            splt_amt = try_float(splt_rec.featMap[self.splt_amt_fld][0][1])
         except (KeyError, IndexError):
-	    logger.warning('No amount field found for Split Record %s', event.data)
-	    splt_amt = 0.0
+            logger.warning('No amount field found for Split Record %s', event.data)
+            splt_amt = 0.0
         new_actv_dict['_amt'] = splt_amt
         if self.splt_pct_fld:
             splt_pct = try_float(splt_rec.featMap[self.splt_pct_fld][0][1])
@@ -405,11 +405,11 @@ class SplitsEventAggregator(EventAggregator):
             self.active_set[splt_type][ID][fld] = new_val
 
     def handle_deletion(self, event):
-        '''
+        """
         reduces total percentage in self.tot_splt_pct,
         removes ID from self.active_set
         decreases self.tot_amt
-        '''
+        """
         _ts, _type, ID = event
 
         splt_rec = self.recs[event.data]
@@ -432,14 +432,14 @@ class SplitsEventAggregator(EventAggregator):
         self.processed_deletes.add(ID)
 
     def guess_deleted(self, active_recs):
-        '''
+        """
         This can be made arbitrarily complicated as needed but for now we
         basically get rid of the first one sorted alphabetically
-        '''
+        """
         return sorted(active_recs)[0]
 
     def try_finalize(self, force=False):
-        '''
+        """
         every time there is progression in timestamp, we either
         1) write a new state to output fields (if the current state is good)
         or 2) incrementally improve the state and make a recursive call.
@@ -453,7 +453,7 @@ class SplitsEventAggregator(EventAggregator):
 
         for this sub-class force parameter is ignored
 
-        '''
+        """
 
         for splt_type, tot_pct in self.tot_splt_pct.items():
             excess = tot_pct - 100.0

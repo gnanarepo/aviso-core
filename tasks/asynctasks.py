@@ -1,5 +1,6 @@
 import datetime
 import logging
+from datetime import UTC
 
 from aviso.framework import tracer
 from aviso.framework.diagnostics import probe_util
@@ -37,7 +38,7 @@ def subtask_handler(t, kwargs=None, queue=None, args=(), d=0):
         ts.extid = tid.id
         ts.celery_id = tid.id
         ts.main_id = tid.id
-        ts.submit_time = datetime.datetime.utcnow()
+        ts.submit_time = datetime.datetime.now(UTC)
         ts.status = Task.STATUS_SUBMITTED
         ts.pool_name = WORKER_POOL
         ts.cname = POOL_PREFIX

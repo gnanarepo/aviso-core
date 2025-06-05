@@ -58,7 +58,7 @@ def DatasetClass(ds, target='_data'):
         prepare_warnings = None
 
         def prepare(self, ds):
-            if(ds.ds_type is None or ds.ds_type != 'uip' or target != '_data'):
+            if ds.ds_type is None or ds.ds_type != 'uip' or target != '_data':
                 self.prepare_warnings = defaultdict(set)
                 self.translate_features(ds)
             return False
@@ -97,7 +97,7 @@ class BasicFileType:
         self.__dict__.update(config)
         # Fix for box.  If last_approved time is saved as epoch for whatever
         # reason convert it into datetime.
-        if isinstance(self.last_approved_time, (int)):
+        if isinstance(self.last_approved_time, int):
             #self.last_approved_time = epoch2datetime(self.last_approved_time)
             from datetime import datetime
             self.last_approved_time = datetime.fromtimestamp(self.last_approved_time / 1000.0, tz=timezone.utc)
@@ -108,7 +108,7 @@ class BasicFileType:
         return True
 
     def validate_record(self, extid, record, ts):
-        if(self.prefix and not extid.startswith(self.prefix)):
+        if self.prefix and not extid.startswith(self.prefix):
             return self.ds.INVALID
         return self.ds.VALID
 
@@ -128,8 +128,8 @@ class BasicFileType:
            getattr(self, 'ctr_config', None)):
             update_dict(self.ctr_config, params)
         else:
-            if(isinstance(params, dict)):
-                if(hasattr(self, module_path)):
+            if isinstance(params, dict):
+                if hasattr(self, module_path):
                     update_dict(getattr(self, module_path), params)
                 else:
                     setattr(self, module_path, params)
@@ -171,14 +171,13 @@ class HistoryFileType(BasicFileType):
             except KeyError:
                 if self.ignore_not_translated:
                     raise KeyError('{} field is ignored'.format(field_name))
-            values = []
-            values.append({
+            values = [{
                 'extid': extid,
                 'when': modified_date,
                 'values': {
                     field_name: record[value_field]
                 }
-            })
+            }]
 
             if old_value_field is not None:
                 values.append({
@@ -468,7 +467,7 @@ class Dataset(Model):
                 if collection_not_found:
                     # Migration code
                     try:
-                        logger.info("Started dataset migration for %s" % (sec_context.name))
+                        logger.info(f"Started dataset migration for {sec_context.name}")
                         cls.migrate_data_to_pg()
                         return super(Dataset, cls).getByName(name)
                     except:
@@ -493,9 +492,9 @@ class Dataset(Model):
             logger.info("Renaming collection in mongodb")
             if count:
                 gnana_db.renameCollection(table_name, table_name + '_backup', True)
-            logger.info("Datameta migration is completed for %s" % (sec_context.name))
+            logger.info(f"Datameta migration is completed for {sec_context.name}")
         except Exception as e:
-            logger.exception("Exception in migrating data from mongo to Postgres %s" % (e.message))
+            logger.exception(f"Exception in migrating data from mongo to Postgres {e}")
             logger.info("Dropping table in postgres")
             gnana_db2.dropCollection(table_name)
             raise
@@ -522,7 +521,7 @@ class Dataset(Model):
             gnana_db2.postgres_table_creator(datameta_schema.format(tablename=tablename),
                                              collection_name=table_name)
         except Exception as e:
-            logger.exception("Exception in creating datameta table %s" % (e.message))
+            logger.exception(f"Exception in creating datameta table {e}")
             raise
 
     # --- Methods to manage stage ---
@@ -532,7 +531,7 @@ class Dataset(Model):
         # We don't want to apply the stage data, so we get the dataset
         # by name only.
         ds = cls.getByName(name)
-        if (ds):
+        if ds:
             attrs = {}
             ds.encode(attrs)
             if stage in attrs['stages']:
@@ -550,7 +549,7 @@ class Dataset(Model):
         if delete_stage is specified, original staging information
         is removed
         """
-        if(stage not in self.stages):
+        if stage not in self.stages:
             return
 
         # Apply everything from stage into the dataset
@@ -567,7 +566,7 @@ class Dataset(Model):
                     params = json.loads(new_value)
                     self.apply_config(action, path, params)
         # Delete the stage if requested
-        if(delete_stage):
+        if delete_stage:
             del self.stages[stage]
             self.stage_used = None
         else:
@@ -584,7 +583,7 @@ class Dataset(Model):
     def add_module(self, module_type, module_name, params):
         # Check the module is not added through another stage
         in_main = getattr(self, module_type).get(module_name)
-        if(in_main is not None):
+        if in_main is not None:
             raise GnanaError('Conflicting Change made in dataset for %s[%s]'
                              % (module_type, module_name))
 
@@ -858,7 +857,7 @@ class Dataset(Model):
             sec_context.is_etl_service_enabled) else None
         if not ds:
             ds = cls.getByName(name, get_from_ms=False)
-            if (not ds):
+            if not ds:
                 return ds
 
             # Get a new dataset where setage information is merged if applicable
@@ -866,7 +865,7 @@ class Dataset(Model):
                 ds.merge_stage(stage, delete_stage=True)
 
             # If the stage is not present, fake a dummy stage
-            if(stage and stage not in ds.stages):
+            if stage and stage not in ds.stages:
                 # Caller is expecting a stage we are not aware of. Could be
                 # data stage
                 ds.stage_used = stage
@@ -880,7 +879,7 @@ class Dataset(Model):
                 for x in all_file_entries:
                     file_entry = InboxFileEntryClassToUse(attrs=x)
                     ft_def = ds.filetype(file_entry.filetype)
-                    if(ft_def.last_approved_time):
+                    if ft_def.last_approved_time:
                         ft_def.last_approved_time = max(ft_def.last_approved_time,
                                                         file_entry.when or datetime.datetime(1970, 1, 1))
 
@@ -907,7 +906,7 @@ class Dataset(Model):
                     if eval_errs:
                         raise GnanaError(eval_errs)
                 ds.decode(dataset_attrs)
-        if(ds.ds_type is None or ds.ds_type != 'uip' or target != '_data' or load_configs):
+        if ds.ds_type is None or ds.ds_type != 'uip' or target != '_data' or load_configs:
             cls.load_configs(ds)
         return ds
 
@@ -929,7 +928,7 @@ class Dataset(Model):
 
     # --- Methods to get various types of information ---
     def filetype(self, name):
-        if(name in self.file_types):
+        if name in self.file_types:
             return self.file_types[name]
         else:
             return None
@@ -1065,9 +1064,7 @@ class Dataset(Model):
         return filt
 
     def get_as_map(self):
-        attrs = {}
-        attrs['name'] = self.name
-        attrs['ds_type'] = self.ds_type
+        attrs = {'name': self.name, 'ds_type': self.ds_type}
 
         for attr_set in itertools.chain(attrset_names,
                                         ['stages'] if not self.stage_used else []):
@@ -1079,7 +1076,7 @@ class Dataset(Model):
                    isinstance(attr_value, list) or
                    isinstance(attr_value, dict)):
                     attrs[attr_set][attr_name] = attr_value
-                elif(hasattr(attr_value, 'get_as_dict')):
+                elif hasattr(attr_value, 'get_as_dict'):
                     attr_value = attr_value.get_as_dict()
                     attrs[attr_set][attr_name] = attr_value
                 else:
@@ -1087,9 +1084,9 @@ class Dataset(Model):
                         "Error in getting specific values for dataset %s[%s]" % (attr_set, attr_name))
                     raise GnanaError("String, list or get_as_dict() required")
 
-                if(isinstance(attr_value, dict)):
+                if isinstance(attr_value, dict):
                     for k, v in attr_value.items():
-                        if(isinstance(v, datetime.datetime)):
+                        if isinstance(v, datetime.datetime):
                             if not v.tzinfo:
                                 v = pytz.utc.localize(v)
                             attr_value[k] = datetime2epoch(v)
@@ -1457,10 +1454,10 @@ def _UIPIterator_batch(ds_inst, db_to_use, record_filter, record_range,
 
         for extid in sorted(stage_only_entries):
             # Skip entries without an ID
-            if(not extid):
+            if not extid:
                 continue
             # Skip the entries until we reach the proper start
-            if(start):
+            if start:
                 start -= 1
                 continue
 
@@ -1495,7 +1492,7 @@ def add_inbox_entries(uip_record, ds_inst, db_to_use=None):
 
     entries_added = False
     for doc in docs:
-        if(doc['_kind'] != ds_inst.InboxEntryClass.kind):
+        if doc['_kind'] != ds_inst.InboxEntryClass.kind:
             continue
         entries_added = True
         inbox_entry = ds_inst.InboxEntryClass(doc)
