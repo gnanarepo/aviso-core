@@ -1,4 +1,18 @@
+import logging
+import random
+import sys
+import time
+
+from eventbus import EventBus
+
 from pymongo import IndexModel, DESCENDING
+from aviso.settings import sec_context, global_cache
+from aviso.events import create_payload
+from redis.exceptions import ConnectionError, BusyLoadingError, TimeoutError
+EVENT_BUS = EventBus()
+logger = logging.getLogger('gnana.%s' % __name__)
+
+
 
 
 FM_COLL = 'fm_data'
@@ -771,3 +785,68 @@ DEAL_SERVICE_MIGRATORS = {DEALS_COLL: deals_migrator,
 
 
 CRR_PIVOT = 'CRR'
+
+
+def is_redis_ready(max_retries=6, retry_initial_delay=0.1, backoff_factor=2):
+    """Checks if the Redis server is ready to accept commands.
+
+    Args:
+        max_retries: Maximum number of connection attempts (defaults to 5).
+        retry_initial_delay: Initial delay between retries in seconds (defaults to 0.1).
+        backoff_factor: Factor by which to increase delay between retries (defaults to 2).
+
+    Returns:
+        True if the connection is successful and server is responsive, False otherwise.
+    """
+    delay = retry_initial_delay
+    for attempt in range(1, max_retries):
+        try:
+            client = global_cache
+            if client.info().get('loading') != '1':
+                client.ping()
+                return True
+        except (BusyLoadingError, ConnectionError, TimeoutError) as e:
+            logger.warning("Redis connection issue on attempt {}: {}".format(attempt, e))
+
+        delay = min(delay * backoff_factor + random.uniform(0, delay), 30)
+        time.sleep(delay)
+
+    logger.error("Failed to connect to Redis after {} retries.".format(max_retries))
+    return False
+
+
+def send_notifications(service_name, notification_data, notification_time=None, tonkean=False):
+    """
+    Send notifications to an Event Bus
+
+    Args:
+        service_name (str): Name of the service requesting notification.
+        notification_data (list): List of dictionaries containing notification information.
+        notification_time (datetime.datetime, optional): Time to set the notification flag (default: None).
+        tonkean (bool, optional): Flag to include tokenized payload (default: False).
+    """
+
+    tenant_details = sec_context.details
+    if notification_time:
+        tenant_details.set_flag('notification', service_name, notification_time)
+        tenant_details.save()
+
+    published_count = 0
+    total_size = sum(sys.getsizeof(notification) for notification in notification_data)
+
+    if is_redis_ready():
+        for _notification in notification_data:
+            EVENT_BUS.publish(service_name, **create_payload(**_notification))
+            published_count += 1
+
+            if tonkean:
+                try:
+                    EVENT_BUS.publish('tonkean_payload', **create_payload(**_notification))
+                    return True
+                except Exception as e:
+                    logger.exception("Unable to send tonkean_payload %s" % e.msg)
+        logger.info("Published an event {} to eventbus for notifying {} users, total_size={}".format(service_name, published_count, total_size))
+        return True
+    else:
+        logger.exception("Failed sending {} {} notifications due to redis server busy state, contact administrator asap.".format(
+            len(notification_data), service_name))

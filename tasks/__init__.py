@@ -25,6 +25,7 @@ from domainmodel.app import (ResultCache, Task, TaskActive, TaskArchive,
                              V2StatsLog)
 from tasks import asynctasks
 from utils import date_utils, file_utils, memory_usage_resource
+from utils.common import cached_property
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -656,3 +657,57 @@ def check_and_log_progress(tasks_revoked, total_task_count, progress):
 
 def revokejobs(traceid):
     return json.loads(''.join(revokejobs_streaming(traceid)))
+
+def run_task(task,
+             args,
+             ):
+    """
+    helper method to run tasks
+    Arguments:
+        task {classobj} -- task class
+        args {dict} -- task args
+    Returns:
+        dict -- success status of task executon
+    """
+    task_instance = task(**args)
+    task_instance.process()
+    task_instance.persist()
+    return task_instance.return_value
+
+class BaseTask(object):
+    """
+    base class of interface each task in micro app must adhere to
+    """
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def execute_forcefully(self):
+        return True
+
+    def process(self):
+        """
+        process data for task
+
+        Raises:
+            NotImplementedError
+        """
+        raise NotImplementedError
+
+    def persist(self):
+        """
+        persist task data to database
+
+        Raises:
+            NotImplementedError
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def return_value(self):
+        """
+        metadata about task run
+
+        Returns:
+            dict -- task metadata
+        """
+        return {'success': True}

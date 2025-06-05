@@ -190,6 +190,30 @@ def merge_dicts(*dictionaries):
         result.update(dictionary)
     return result
 
+def merge_nested_dicts(*dicts):
+    """
+    merge many nested dictionaries together
+    dicts later in list take precedence on overlaps
+    """
+    dicts = list(dicts)
+    if len(dicts) == 1:
+        return dicts.pop()
+    while len(dicts) > 2:
+        merge_nested_dicts(*dicts[-2:])
+        dicts.pop()
+    for key in dicts[-1]:
+        if key in dicts[-2] and isinstance(dicts[-2][key], dict) and isinstance(dicts[-1][key], dict):
+            merge_nested_dicts(dicts[-2][key], dicts[-1][key])
+        else:
+            dicts[-2][key] = dicts[-1][key]
+    return dicts[-2]
+
+def try_values(dicty, key):
+    try:
+        return dicty[key].values()
+    except:
+        return [dicty.get(key, key)]
+
 def iter_chunks(my_list, batch_size=5):
     start = 0
     more = True

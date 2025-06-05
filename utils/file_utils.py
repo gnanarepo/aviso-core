@@ -3,7 +3,6 @@ import hashlib
 import logging
 import os
 import pprint
-import sys
 import time
 from subprocess import PIPE, Popen
 

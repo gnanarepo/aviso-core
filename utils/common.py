@@ -1,4 +1,9 @@
+import json
+
 import netaddr
+from aviso.framework.views import GnanaView
+from django.http import HttpResponse
+
 
 class weekday:
     __slots__ = ["weekday", "n"]
@@ -63,3 +68,26 @@ def ip_match(ip, valid_ip_list):
         if ip in nw:
             return n
     return None
+
+class MicroAppView(GnanaView):
+    """
+    base class for all micro app views
+    """
+    validators = []
+
+    @cached_property
+    def config(self):
+        raise NotImplementedError
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == 'OPTIONS':
+            # If the request method is OPTIONS, return an empty response
+            return HttpResponse()
+        self.debug = request.GET.get('debug')
+        if request.GET.get('help'):
+            return HttpResponse(json.dumps({'help': self.__doc__}), content_type='application/json')
+        for validator in self.validators:
+            response = validator(request, self.config)
+            if isinstance(response, HttpResponse):
+                return response
+        return super(MicroAppView, self).dispatch(request, *args, **kwargs)
