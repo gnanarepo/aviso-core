@@ -42,4 +42,4 @@ tzdata==2025.2
 urllib3==2.4.0
 vine==5.1.0
 wcwidth==0.2.13
--e git+git@github.com:gnanarepo/eventbus.git@v1.0#egg=eventbus
+#-e git+git@github.com:gnanarepo/eventbus.git@v1.0#egg=eventbus

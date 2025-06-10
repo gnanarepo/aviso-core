@@ -51,7 +51,7 @@ def initialize_system():
     # Settings
     period = '2026Q1'
     user_name = 'waqas.ahmed'
-    tenant_name = 'netapp.com'
+    tenant_name = 'lenovo_qa.com'
 
     # Initialize thread local storage
     if not hasattr(security_context, 'thread_local'):
@@ -93,7 +93,7 @@ if __name__ == '__main__':
 
         # Step 4: Print verification info
         print("Security Context Name:", security_context.name)
-        print("tenant db Name:", security_context.tenant_db)
+        # print("tenant db Name:", security_context.tenant_db)
         db = security_context.get_tenant_db()
         print("GET Tenant DB:", db.deals.count_documents({}))
         try:
