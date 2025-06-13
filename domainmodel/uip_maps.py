@@ -152,25 +152,8 @@ class DBMap(UIPMap):
         self.stage_ds = stage_ds
         super(DBMap, self).__init__(feature, config, stage_ds)
 
-    def get_map_details(self, output_fields_only=False):
-        return None
-
     def process(self, uip_obj):
         raise Exception('abstract class')
-
-    def get_prepare_criteria(self):
-        # Populate the prepare criteria
-        return self.prepare_criteria
-
-    def cache_criteria(self):
-        # Populate the cache criteria based on the config
-        return self.cache_criteria
-
-    def pre_cache(self, cache_options=None):
-        pass
-
-    def build_wrt_db(self):
-        pass
 
 
 class OneToManyDBMap(DBMap):
@@ -275,53 +258,6 @@ class Join(ManyToOneDBMap):
             map_details["field_info"] = field_info
             map_details["attributes"] = other_attr
             return map_details
-
-    def save_map_details(self, map_def, map_details, dataset_name, comments=''):
-        new_config = self.config
-        other_attr = map_details["attributes"]
-        if "lookup_fld" in self.config.keys():
-            new_config["lookup_fld"] = other_attr["lookup_fld"]['value']
-        if "exec_rank" in self.config.keys():
-            new_config["exec_rank"] = other_attr["exec_rank"]['value']
-        if "log_warnings" in self.config.keys():
-            new_config["log_warnings"] = other_attr["log_warnings"]['value']
-
-        data = map_details["field_info"]["data"]
-        fld_defs = self.config["fld_defs"]
-        new_fld_defs = {}
-        for d in data:
-            if d["out_fld"] in fld_defs.keys():
-                new_fld_defs[d["out_fld"]] = fld_defs[d["out_fld"]]
-            else:
-                new_fld_defs[d["out_fld"]] = {}
-            if d["out_fld"] != d["req_fields"]:
-                if d['req_fields'] != '' and d['req_fields'] != '-':
-                    new_fld_defs[d["out_fld"]]["req_fields"] = d["req_fields"]
-                else:
-                    if "req_fields" in new_fld_defs[d["out_fld"]].keys():
-                        del new_fld_defs[d["out_fld"]]["req_fields"]
-            if d["fallback_val"] != '' and d["fallback_val"] != '-':
-                new_fld_defs[d["out_fld"]]["fallback_val"] = d["fallback_val"]
-            else:
-                if "fallback_val" in new_fld_defs[d["out_fld"]].keys():
-                    del new_fld_defs[d["out_fld"]]["fallback_val"]
-        new_config["fld_defs"] = new_fld_defs
-
-        from feature import Feature
-        Feature().commit_dataset_config_changes(dataset_name, 'ConfigUI',
-                                                [('set_value', 'maps.' + map_def, new_config)],
-                                                comments)
-
-    def get_source_ds_fields(self):
-        source_flds = {}
-        req_flds = set()
-        fld_defs = self.config['fld_defs']
-        if self.config['ds_name']:
-            req_flds.add(self.config['lookup_fld'])
-            for _, defs in fld_defs.items():
-                req_flds |= set(defs["req_fields"])
-            source_flds[self.config['ds_name']] = req_flds
-        return source_flds
 
     def process(self, uip_obj):
         """

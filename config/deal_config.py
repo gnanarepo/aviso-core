@@ -1,11 +1,14 @@
 import os
-from copy import deepcopy
+import copy
 import logging
+from collections import defaultdict
 
 from aviso.framework.mongodb import GnanaMongoDB
 from pymongo import MongoClient
 
 from infra.filters import fetch_filter, fetch_many_filters
+from config import BaseConfig
+from infra.filters import fetch_filter, parse_filters, fetch_many_filters
 from utils.common import cached_property
 from aviso.framework import event_holder, tenant_holder
 from config.base_config import BaseConfig, BadConfigurationError
@@ -14,12 +17,15 @@ from aviso.framework.postgresdb import GnanaPostgresDB
 logger = logging.getLogger('gnana.%s' % __name__)
 from aviso.settings import Cache_Connection, mongo_db_url, ISPROD
 from utils import is_true
+from aviso.settings import sec_context
 
 # cacheconn initialize
 cache_con = Cache_Connection()
+from utils.misc_utils import get_nested, get_node_depth
 
 # postgres initialize
 gnana_db2 = GnanaPostgresDB()
+logger = logging.getLogger("gnana.%s" % __name__)
 
 # mongodb initialize
 gnana_db = None
@@ -29,12 +35,122 @@ try:
     gnana_db = GnanaMongoDB(mongo_con)
 except Exception as e:
     logger.exception("Unable to connect to MONGODB: " + str(e))
+DEFAULT_BEST_CASE_VALS = ["Best Case"]
+DEFAULT_COMMIT_VALS = [
+    "Commit",
+    "Committed",
+    "Forecasted",
+    "commit",
+    "Forecasted Upside",
+    "True",
+    "true",
+    True,
+]
+DEFAULT_PIPELINE_VALS = ["Pipeline", "pipeline"]
+DEFAULT_RENEWAL_VALS = [
+    "Renewal",
+    "renewal",
+    "RENEWAL",
+    "Renewals",
+    "Recurring",
+    "Resume",
+    "subscription renewal",
+    "support renewal",
+    "Existing Customer - Maintenance renewal",
+    "Existing customer - Subscription renewal",
+    "Existing customer - subscription renewal",
+    "Maintenance renewal",
+    "Existing Customer \u2013 maintenance renewal",
+    "Maintenance Renewal (MR)",
+    "Existing Business",
+    "delayed renewal",
+    "Contract renewal",
+    "contractual renewal",
+    "Customer",
+    "Support Renewal",
+    "EC renewal",
+]
+DEFAULT_MOST_LIKELY_VALS = ["Most Likely", "most likely"]
+DEFAULT_DLF_VALS = ["True", "true", True]
+PULL_IN_LIST = [
+    "__fav__",
+    "OpportunityName",
+    "OpportunityOwner",
+    "win_prob",
+    "pullin_prob",
+    "CloseDate",
+    "Amount",
+    "Stage",
+    "ForecastCategory",
+    "__id__",
+    "SFDCObject"
+]
+DEFAULT_COVID_OPPMAP_MAP_TYPES = {"amount": "Amount", "count": "Count"}
+DEFAULT_STANDARD_OPPMAP_MAP_TYPES = {
+    "amount": "Amount",
+    "count": "Count",
+    "quartiles": "Quartiles",
+}
+DEFAULT_DLF_FCST_COLL_SCHEMA = [
+    "opp_id",
+    "is_deleted",
+    "period",
+    "close_period",
+    "drilldown_list",
+    "hierarchy_list",
+    "dlf.in_fcst",
+    "update_date",
+]
 
 # try:
 #     mongo_con_2 = MongoClient(mongo_db_url_2)[os.environ['mongo-db-name-2']]
 #     gnana_db3 = GnanaMongoDB(mongo_con_2)
 # except Exception as e:
 #     logger.exception("unable to connect to fm app mongodb" + str(e))
+DEFAULT_DISPLAY_INSIGHTS_CARD = {
+    "amount": [],
+    "close_date": ["pushes", "suggested_push"],
+    "stage": ["sharp_decline", "stage_dur", "stage_age"],
+    "global": [
+        "grouper",
+        "other_group",
+        "rare_group",
+        "score_history",
+        "close_date_exp",
+    ],
+    "score_explanation": [
+        "upside_deal",
+        "deal_amount_reco",
+        "deal_speed",
+        "scenario",
+        "score_history_dip",
+        "primary_competitor",
+        "competitor_win_loss",
+        "recency",
+        "new_deal",
+        "custom",
+        "closing_soon_after_eoq",
+        "high_leverage_moments",
+        "risk_insights",
+        "winscore_projections_upper",
+        "winscore_projections_lower",
+        "winscore_insights"
+    ],
+    "field_level": [
+        "stale_deal",
+        "cd_change",
+        "anomaly",
+        "amount_change",
+        "no_amount",
+        "recommit2",
+        "stale_commit",
+        "never_pushed",
+        "engagement_grade",
+        "yearold",
+        "closedate",
+        "past_closedate",
+        "dlf_bad",
+        "dlf_good",
 
 # try:
 #     local_mongo_db = MongoClient(
@@ -48,10 +164,99 @@ except Exception as e:
 cache_server = is_true(os.environ.get('CACHE_SERVER', False))
 event_context = event_holder
 sec_context = tenant_holder
+    ],
+    "in_fcst": ["dlf_change"],
+}
+DEFAULT_OPPMAP_JUDGE_TYPE_OPTION_LABELS = {
+    "dlf": "DLF",
+    "commit": "Commit",
+    "most_likely": DEFAULT_MOST_LIKELY_VALS[0],
+}
+DEFAULT_MILESTONES_NEW = [
+    {
+        "name": "Lead Conversion",
+        "color": "#f89685",
+        "items": ['Convert lead to 5% probability']
+    },
+    {
+        "name": "Account Engagement",
+        "color": "#2faadc",
+        "items": ["Develop customer interest in proceeding with conversations"]
+    },
+    {
+        "name": "Qualification",
+        "color": "#107e4e",
+        "items": ['Completion of Disco call', 'BANT Qualification']
+    },
+    {
+        "name": "Identify pain points and Metrics",
+        "color": "#3d4689",
+        "items": ["Identification of Pain Points", "Identification of Metrics"]
+    },
+    {
+        "name": "Identify Champion",
+        "color": "#46d62e",
+        "items": ['Champion Identification']
+    },
+    {
+        "name": "Identify your stakeholders",
+        "color": "#ffc22b",
+        "items": ['Identification of Economic Buyer', 'Identification of Decision Process',
+                  'Identification of Decision Criteria']
+    },
+    {
+        "name": "Approval from Executive board",
+        "color": "#e1a612",
+        "items": ['Schedule EB meeting', 'Business reviews']
+    },
+    {
+        "name": "Legal Approval",
+        "color": "#e03e28",
+        "items": ['Legal Approval', 'Ready for signatures']
+    },
+    {
+        "name": "Signatures",
+        "color": "#6e77c2",
+        "items": ["Signatures to be done by both the parties"]
+    },
+    {
+        "name": "Final review",
+        "color": "#025b8d",
+        "items": ['Deal desk final review']
+    }
+]
 
+DEFAULT_MILESTONES_RENEWAL = [
+    {
+        "name": "Renewal Generated",
+        "color": "#f89685",
+        "items": []
+    },
+    {
+        "name": "Schedule Meeting with Customer",
+        "color": "#2faadc",
+        "items": ["Setup meeting with customer to discuss renewal"]
+    },
+    {
+        "name": "Verbal Agreement",
+        "color": "#107e4e",
+        "items": ['Get verbal agreement to renew']
+    },
+    {
+        "name": "Renewal Quote",
+        "color": "#3d4689",
+        "items": ["Meeting with EB/ Executive sponsor", "Begin negotiating propoal components",
+                  "Complete the Business Case",
+                  "Get the initial budget approved", "No churn/dollar churn amount agreement"]
+    }
+]
 
 # TODO: Log_config is none for current development
 # Need to copy log_config for stage before pushing to production
+DEFAULT_MILESTONES = {
+    'new': DEFAULT_MILESTONES_NEW,
+    'renewal': DEFAULT_MILESTONES_RENEWAL
+}
 
 if 'OPCENTER_PWD' not in locals():
     OPCENTER_PWD = os.environ.get('OPCENTER_DB_PASSWORD', True)
@@ -63,6 +268,12 @@ TMP_DIR = '/tmp'
 if gnana_db:
     gnana_db.is_prod = ISPROD
     gnana_db.sec_context = sec_context
+def _convert_state(state):
+    if state == "True":
+        return True
+    elif state == "False":
+        return False
+    return state
 
 gnana_db2.sec_context = sec_context
 
@@ -4509,7 +4720,7 @@ class DealConfig(BaseConfig):
 
     @cached_property
     def versioned_hierarchy(self):
-        from config.hier_config import HierConfig
+        from config import HierConfig
 
         hier_config = HierConfig()
 

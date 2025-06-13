@@ -1,13 +1,11 @@
 import copy
 import logging
-from collections import defaultdict
 from datetime import timedelta
 
 from aviso.settings import sec_context
 
-from config.base_config import BaseConfig
-from infra.filters import (FilterError, _valid_filter, fetch_filter,
-                           fetch_many_filters, parse_filters)
+from config import BaseConfig, DealConfig
+from infra.filters import (FilterError, _valid_filter, fetch_filter, parse_filters)
 from infra.rules import HIERARCHY_RULES, passes_configured_hierarchy_rules
 from utils.common import cached_property
 from utils.date_utils import datetime2epoch, epoch, get_bom, now
@@ -17,217 +15,7 @@ from utils.misc_utils import (CycleError, UndefinedError, dict_of_dicts_gen,
 logger = logging.getLogger("gnana.%s" % __name__)
 
 DEFAULT_ROLE = 'default_role'
-DEFAULT_BEST_CASE_VALS = ["Best Case"]
-DEFAULT_COMMIT_VALS = [
-    "Commit",
-    "Committed",
-    "Forecasted",
-    "commit",
-    "Forecasted Upside",
-    "True",
-    "true",
-    True,
-]
 
-DEFAULT_PIPELINE_VALS = ["Pipeline", "pipeline"]
-
-DEFAULT_MOST_LIKELY_VALS = ["Most Likely", "most likely"]
-
-DEFAULT_RENEWAL_VALS = [
-    "Renewal",
-    "renewal",
-    "RENEWAL",
-    "Renewals",
-    "Recurring",
-    "Resume",
-    "subscription renewal",
-    "support renewal",
-    "Existing Customer - Maintenance renewal",
-    "Existing customer - Subscription renewal",
-    "Existing customer - subscription renewal",
-    "Maintenance renewal",
-    "Existing Customer \u2013 maintenance renewal",
-    "Maintenance Renewal (MR)",
-    "Existing Business",
-    "delayed renewal",
-    "Contract renewal",
-    "contractual renewal",
-    "Customer",
-    "Support Renewal",
-    "EC renewal",
-]
-
-DEFAULT_DLF_VALS = ["True", "true", True]
-
-PULL_IN_LIST = [
-    "__fav__",
-    "OpportunityName",
-    "OpportunityOwner",
-    "win_prob",
-    "pullin_prob",
-    "CloseDate",
-    "Amount",
-    "Stage",
-    "ForecastCategory",
-    "__id__",
-    "SFDCObject"
-]
-
-DEFAULT_DLF_FCST_COLL_SCHEMA = [
-    "opp_id",
-    "is_deleted",
-    "period",
-    "close_period",
-    "drilldown_list",
-    "hierarchy_list",
-    "dlf.in_fcst",
-    "update_date",
-]
-
-DEFAULT_DISPLAY_INSIGHTS_CARD = {
-    "amount": [],
-    "close_date": ["pushes", "suggested_push"],
-    "stage": ["sharp_decline", "stage_dur", "stage_age"],
-    "global": [
-        "grouper",
-        "other_group",
-        "rare_group",
-        "score_history",
-        "close_date_exp",
-    ],
-    "score_explanation": [
-        "upside_deal",
-        "deal_amount_reco",
-        "deal_speed",
-        "scenario",
-        "score_history_dip",
-        "primary_competitor",
-        "competitor_win_loss",
-        "recency",
-        "new_deal",
-        "custom",
-        "closing_soon_after_eoq",
-        "high_leverage_moments",
-        "risk_insights",
-        "winscore_projections_upper",
-        "winscore_projections_lower",
-        "winscore_insights"
-    ],
-    "field_level": [
-        "stale_deal",
-        "cd_change",
-        "anomaly",
-        "amount_change",
-        "no_amount",
-        "recommit2",
-        "stale_commit",
-        "never_pushed",
-        "engagement_grade",
-        "yearold",
-        "closedate",
-        "past_closedate",
-        "dlf_bad",
-        "dlf_good",
-
-    ],
-    "in_fcst": ["dlf_change"],
-}
-
-DEFAULT_STANDARD_OPPMAP_MAP_TYPES = {
-    "amount": "Amount",
-    "count": "Count",
-    "quartiles": "Quartiles",
-}
-
-DEFAULT_COVID_OPPMAP_MAP_TYPES = {"amount": "Amount", "count": "Count"}
-
-DEFAULT_OPPMAP_JUDGE_TYPE_OPTION_LABELS = {
-    "dlf": "DLF",
-    "commit": "Commit",
-    "most_likely": DEFAULT_MOST_LIKELY_VALS[0],
-}
-
-OWNER_INSIGHTS = ["owner_insight", "owner_bad",
-                  "owner_amt", "owner_cd", "owner_dct", "owner_cmt"]
-
-DEFAULT_MILESTONES_NEW = [
-    {
-        "name": "Lead Conversion",
-        "color": "#f89685",
-        "items": ['Convert lead to 5% probability']
-    },
-    {
-        "name": "Account Engagement",
-        "color": "#2faadc",
-        "items": ["Develop customer interest in proceeding with conversations"]
-    },
-    {
-        "name": "Qualification",
-        "color": "#107e4e",
-        "items": ['Completion of Disco call', 'BANT Qualification']
-    },
-    {
-        "name": "Identify pain points and Metrics",
-        "color": "#3d4689",
-        "items": ["Identification of Pain Points", "Identification of Metrics"]
-    },
-    {
-        "name": "Identify Champion",
-        "color": "#46d62e",
-        "items": ['Champion Identification']
-    },
-    {
-        "name": "Identify your stakeholders",
-        "color": "#ffc22b",
-        "items": ['Identification of Economic Buyer', 'Identification of Decision Process',
-                  'Identification of Decision Criteria']
-    },
-    {
-        "name": "Approval from Executive board",
-        "color": "#e1a612",
-        "items": ['Schedule EB meeting', 'Business reviews']
-    },
-    {
-        "name": "Legal Approval",
-        "color": "#e03e28",
-        "items": ['Legal Approval', 'Ready for signatures']
-    },
-    {
-        "name": "Signatures",
-        "color": "#6e77c2",
-        "items": ["Signatures to be done by both the parties"]
-    },
-    {
-        "name": "Final review",
-        "color": "#025b8d",
-        "items": ['Deal desk final review']
-    }
-]
-
-DEFAULT_MILESTONES_RENEWAL = [
-    {
-        "name": "Renewal Generated",
-        "color": "#f89685",
-        "items": []
-    },
-    {
-        "name": "Schedule Meeting with Customer",
-        "color": "#2faadc",
-        "items": ["Setup meeting with customer to discuss renewal"]
-    },
-    {
-        "name": "Verbal Agreement",
-        "color": "#107e4e",
-        "items": ['Get verbal agreement to renew']
-    },
-    {
-        "name": "Renewal Quote",
-        "color": "#3d4689",
-        "items": ["Meeting with EB/ Executive sponsor", "Begin negotiating propoal components",
-                  "Complete the Business Case",
-                  "Get the initial budget approved", "No churn/dollar churn amount agreement"]
-    }
-]
 
 COLLABORATION_RECORDINGS_TAB_DEFAULT_OPTIONS =  [{
                                                     'key': 'All',
@@ -244,23 +32,6 @@ COLLABORATION_RECORDINGS_TAB_DEFAULT_OPTIONS =  [{
                                                     # }
                                                 ]
 
-
-DEFAULT_MILESTONES = {
-    'new': DEFAULT_MILESTONES_NEW,
-    'renewal': DEFAULT_MILESTONES_RENEWAL
-}
-
-
-def _convert_state(state):
-    if state == "True":
-        return True
-    elif state == "False":
-        return False
-    return state
-
-
-def get_node_depth(node):
-    pass
 
 
 class FMConfig(BaseConfig):
@@ -287,12 +58,12 @@ class FMConfig(BaseConfig):
 
     @cached_property
     def periods_config(self):
-        from config.periods_config import PeriodsConfig
+        from config import PeriodsConfig
         return PeriodsConfig(debug=self.debug, db=self.db)
 
     @cached_property
     def hier_config(self):
-        from config.hier_config import HierConfig
+        from config import HierConfig
         return HierConfig(debug=self.debug, db=self.db)
 
     @cached_property

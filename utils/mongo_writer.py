@@ -496,42 +496,6 @@ def label_node(node,
     if not is_lead_service(service):
         _set_run_full_mode_flag(True)
 
-
-def order_nodes(ordered_nodes,
-                config,
-                signature='order_node',
-                drilldown=False,
-                as_to=None
-                ):
-    """
-    order nodes for display purposes
-
-    Arguments:
-        ordered_nodes {list} -- children nodes in desired sort order            ['0050000FLN2C9I2', ]
-        config {HierConfig} -- config for hierarchy, from HierConfig            ...?
-
-    Keyword Arguments:
-        signature {str} -- what process triggered action
-                           (default: {'order_node'})
-        drilldown {bool} -- if True, write to drilldown collection
-                            (default: {False})
-        db {object} -- instance of tenant_db (default: {None})
-                       if None, will create one
-    """
-    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
-    hier_collection = sec_context.tenant_db[coll]
-
-    # TODO: obviously shitty, but does anyone care about this feature
-    # going backwards so we can sort highest priority to lowest ...
-    # because otherwise mongo puts all the nulls first
-    for i, node in enumerate(ordered_nodes[::-1]):
-        hier_collection.update({'node': node,
-                                'to': as_to}, {'$set': {'priority': i}})
-
-    # Enable flag to run the capturedrilldowntask
-    _set_run_full_mode_flag(True)
-
-
 def update_nodes_with_valid_to_timestamp(from_timestamp,
                                         drilldown=False,
                                          service=None):

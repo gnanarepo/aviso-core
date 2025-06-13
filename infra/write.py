@@ -3,7 +3,7 @@ import logging
 from aviso.settings import sec_context
 from pymongo import UpdateOne
 
-from infra import DEALS_COLL, FORECAST_SCHEDULE_COLL
+from infra.constants import FORECAST_SCHEDULE_COLL, DEALS_COLL
 from utils.mongo_writer import bulk_write
 
 logger = logging.getLogger('gnana.%s' % __name__)

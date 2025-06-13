@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import shutil
 import sys
 import tempfile
 import threading
@@ -10,20 +9,15 @@ import traceback
 import uuid
 from datetime import datetime, timezone
 
-import celery
-from _collections import defaultdict
 from aviso.framework import tracer
 from aviso.framework.diagnostics import probe_util
 from aviso.framework.views import GnanaError
 from aviso.settings import (CNAME, DEBUG, TMP_DIR, event_context,
-                            gnana_cprofile_bucket, gnana_db, gnana_storage,
+                            gnana_cprofile_bucket, gnana_storage,
                             log_config, node, sec_context)
 from celery import current_task
-from celery.result import AsyncResult
 
-from domainmodel.app import (ResultCache, Task, TaskActive, TaskArchive,
-                             V2StatsLog)
-from tasks import asynctasks
+from domainmodel.app import Task, TaskArchive, V2StatsLog
 from utils import date_utils, file_utils, memory_usage_resource
 from utils.common import cached_property
 
@@ -44,91 +38,6 @@ dup_celery_id = 'duplicate_celery_id'
 filename_key = 'filename'
 
 thread_local_tags = threading.local()
-
-def celery_task_handler(tasks, cleanup, kill_siblings_on_fail=False, d=0):
-    def find_kill_children(traceid):
-        criteria = {'object.consumers': traceid}
-        result = Task.getAll(criteria)
-        for t in result:
-            res = AsyncResult(t.extid)
-            if res.state not in ['SUCCESS', 'FAILURE']:
-                t.status = Task.STATUS_ERROR
-                t.save(is_partial=True, field_list=['object.status'])
-                t.current_status_msg = 'terminated'
-                res.revoke(terminate=True, signal='SIGKILL')
-    results = []
-    failed_task_message = ''
-    failed = False
-    if d == 0:
-        task_list = [asynctasks.subtask_handler(
-            t[0], kwargs=t[1], queue=t[2]) for t in tasks]
-    elif d == 1:
-        task_list = [asynctasks.subtask_handler(t=t, d=d) for t in tasks]
-    elif d == 2:
-        task_list = [
-            asynctasks.subtask_handler(t=t[0], queue=t[1], d=d) for t in tasks]
-    dup = []
-    copy_list = []
-    for task_entry in task_list:
-        if task_entry in copy_list:
-            dup.append(task_entry)
-        else:
-            copy_list.append(task_entry)
-    if dup:
-        failed = True
-        logger.error("Duplicate task ids in task list %s" % dup)
-    while task_list and not dup:
-        remainingtasks = task_list
-        time.sleep(2)
-        try:
-            for t in remainingtasks:
-                if t.ready():
-                    # if isinstance(result,list) else results.append(result)
-                    resp = t.get()
-                    if isinstance(resp, dict):
-                        if large_response_key in resp:
-                            resp = load_response(resp)
-                        elif dup_celery_id in resp:
-                            raise Exception("Tasks are having duplicate celery_id")
-                    results.append(resp)
-                    task_list.remove(t)
-
-        except Exception as ex:
-            failed = True
-            failed_task_message += t.id + \
-                ' failed with the message' + ex.message
-            task_list.remove(t)
-            if kill_siblings_on_fail:
-                break
-
-    if kill_siblings_on_fail and failed:
-        for t in task_list:
-            mytask = Task.getByFieldValue('extid', t.task_id)
-            mytask.status = Task.STATUS_ERROR
-            mytask.current_status_msg = 'terminated' + failed_task_message
-            mytask.save(is_partial=True, field_list=['object.status',
-                                                     'object.current_status_msg'])
-            t.revoke(terminate=True, signal='SIGKILL')
-            find_kill_children(t.task_id)
-    if failed:
-        if cleanup is not None:
-            cleanup()
-        raise Exception(
-            'Failures detected in subtasks:\n ' + failed_task_message)
-    return results
-
-
-class CacheDBInterface:
-    def get_cache(self, res_id):
-        return ResultCache.getByFieldValue('extid', res_id)
-
-    def getBySpecifiedCriteria(self, criteria):
-        return ResultCache.getBySpecifiedCriteria(criteria)
-
-    def save_cache(self, res, **kwargs):
-        if 'is_partial' not in kwargs:
-            kwargs['is_partial'] = True
-        res.save(**kwargs)
 
 
 class TaskDBInterface:
@@ -187,7 +96,6 @@ def gnana_task_support(f):
         tenantname = user_and_tenant[1]
         logintenant = user_and_tenant[2]
 
-        cache_db = CacheDBInterface() if 'cache_db' not in options else options['cache_db']
         task_db = TaskDBInterface() if 'task_db' not in options else options['task_db']
         task_metrics = logger.new_metrics()
         task_metrics.new_timer('task.time')
@@ -500,181 +408,9 @@ def check_response_size(fn_response, user_and_tenant, trace):
     return fn_response
 
 
-def load_response(resp_dict):
-    directory_name = tempfile.mkdtemp(dir=TMP_DIR)
-    try:
-        """ We expect that the large_response_key and filename are part of the resp_dict, this will be populated
-        in case of a large response during task processing """
-        filename = resp_dict[filename_key]
-        key = resp_dict[large_response_key]
-        logger.info("loading response from %s-%s" % (key, filename))
-        file_utils.download_from_s3(directory_name, filename, key)
-        with open(os.path.join(directory_name, filename), 'r') as f:
-            return json.load(f)
-    except Exception as ex:
-        msg = 're-raising exception %s while loading response of %s - %s' % (
-            key, filename, ex)
-        logger.warning(msg)
-        raise GnanaError(msg)
-    finally:
-        shutil.rmtree(directory_name)
-
-
 def get_profile_filename(prefix=""):
     return "%sprofile_%s_%s.profile" % (prefix, os.getpid(), time.time())
 
-
-class UnknownTaskError(Exception):
-
-    """ Raised when the completed task is not found  to be pending"""
-    pass
-
-
-def revokejobs_streaming(criteria, cleanup=False, reset_chipotle_trace=False):
-    try:
-        yield '{"affected_tasks":['
-        comma = ""
-        success = "true"
-        tasklist = defaultdict(dict)
-        status = ''
-        status_criteria = {'object.status': {'$in': [Task.STATUS_CREATED,
-                                                     Task.STATUS_STARTED,
-                                                     Task.STATUS_SUBMITTED,
-                                                     Task.STATUS_ERROR]}}
-        criteria = {'$and': [criteria, status_criteria]}
-        msg = ''
-        total_task_count = 0
-        field_list = {'object.extid': 1, 'object.tenant': 1,
-                      'object.framework_version': 1, 'object.trace': 1}
-        if cleanup:
-            field_list['object.task_meta'] = 1
-            field_list['object.tasktype'] = 1
-        for task in gnana_db.findDocuments(Task.getCollectionName(), criteria,
-                                           fieldlist=field_list,
-                                           read_from_primary=True,
-                                           tenant_aware=Task.tenant_aware):
-            yield '%s"%s"' % (comma, task['object']['extid'])
-            comma = ","
-            total_task_count += 1
-            if task['object']['framework_version'] == '2' and cleanup:
-                task_details = (task['object']['extid'], task['object']['task_meta'],
-                                task['object']['tasktype'], task['object']['trace'])
-            else:
-                task_details = (task['object']['extid'], task['object']['trace'])
-            if task['object']['tenant'] in tasklist:
-                if task['object']['framework_version'] in tasklist[task['object']['tenant']]:
-                    tasklist[task['object']['tenant']][
-                        task['object']['framework_version']].append(task_details)
-                else:
-                    tasklist[task['object']['tenant']][task['object']['framework_version']] = [task_details]
-            else:
-                tasklist[task['object']['tenant']][task['object']['framework_version']] = [task_details]
-        progress = 0
-        for tenant, framework_versions in tasklist.items():
-            user_name = 'revoke'
-            logintenant = 'administrative.domain'
-            sec_context.set_context(user_name, tenant, logintenant, user_name, 'tenant', {})
-            trace_list = []
-            for version, total_tasks in framework_versions.items():
-                if msg:
-                    msg += ' and '
-                msg += str(len(total_tasks)) + " v" + version + "_tasks"
-                logger.info("Retrieved %s v%s_tasks for revoking for %s" % (str(len(total_tasks)), version, tenant))
-                if version == '1':
-                    total_tasks_ = []
-                    for i, task_info in enumerate(total_tasks):
-                        task_id, trace = task_info
-                        total_tasks_.append(task_id)
-                        if trace not in trace_list:
-                            trace_list.append(trace)
-                        progress = check_and_log_progress(i, total_task_count, progress)
-                        res = AsyncResult(task_id)
-                        if not res.ready():
-                            id_ = task_id
-                            logger.error(
-                                "terminating task %s, as one of the sub_tasks failed in this group", task_id)
-                            celery.task.control.revoke(id_, terminate=True, signal='SIGKILL')
-                    set_to_criteria = {'$set': {'object.status': Task.STATUS_ERROR,
-                                                'object.current_status_msg': "revoked"}}
-                    task_criteria = {'object.extid': {'$in': total_tasks_}}
-                    gnana_db.updateAll(Task.getCollectionName(), task_criteria, set_to_criteria)
-                else:
-                    total_tasks_ = []
-                    for i, taskdetail in enumerate(total_tasks):
-                        if cleanup:
-                            task_id, task_meta, path, trace = taskdetail
-                            params = task_meta['params']
-                            context = task_meta['context']
-                            from aviso.framework.tasker import V2Task
-                            v2task_obj = V2Task.create_task(path, params=params, context=context)
-                            v2task_obj.cleanup_on_revoke()
-                        else:
-                            task_id, trace = taskdetail
-                        total_tasks_.append(task_id)
-                        if trace not in trace_list:
-                            trace_list.append(trace)
-                    task_criteria = {'object.extid': {'$in': total_tasks_}}
-                    total_tasks = total_tasks_
-                    set_to_criteria = {'$set': {'object.status': Task.STATUS_TERMINATED,
-                                                'object.current_status_msg': "revoked"}}
-                    gnana_db.updateAll(Task.getCollectionName(), task_criteria, set_to_criteria)
-                    TaskActive.truncate_or_drop(task_criteria)
-                    criteria = {'object.requesting_task': {'$in': total_tasks}}
-                    set_to_criteria = {'$set': {'object.status': ResultCache.FAILED}}
-                    gnana_db.updateAll(ResultCache.getCollectionName(), criteria, set_to_criteria)
-                    progress = check_and_log_progress(len(total_tasks), total_task_count, progress)
-            msg += " for " + tenant
-            msg = " Retrieved " + msg + " for revoking"
-            status = ',"status":"%s"' % msg
-            if reset_chipotle_trace:
-                chipotle_status = sec_context.details.get_flag('molecule', 'chipotle_trace', 'finished')
-                if chipotle_status in trace_list:
-                    sec_context.details.set_flag('molecule', 'chipotle_trace', 'finished')
-                dtfo_trace = sec_context.details.get_flag('molecule', 'dtfo_trace', 'finished')
-                if dtfo_trace in trace_list:
-                    sec_context.details.set_flag('molecule', 'dtfo_trace', 'finished')
-                load_activity_trace = sec_context.details.get_flag('molecule', 'load_activity_trace', 'finished')
-                if load_activity_trace in trace_list:
-                    sec_context.details.set_flag('molecule', 'load_activity_trace', 'finished')
-                snapshot_trace = sec_context.details.get_flag('molecule', 'snapshot_trace', 'finished')
-                if snapshot_trace in trace_list:
-                    sec_context.details.set_flag('molecule', 'snapshot_trace', 'finished')
-        logger.info("Revoke progress: %%100.")
-        if not tasklist:
-            msg = "Retrieved 0 tasks for revoking"
-            status += ',"status":"%s"' % msg
-            logger.info(msg)
-        yield '],"success":%s%s}' % (success, status)
-    except Exception as e:
-        logger.exception(e)
-
-
-def check_and_log_progress(tasks_revoked, total_task_count, progress):
-    this_progress = float(tasks_revoked) / total_task_count
-    if this_progress - progress > 0.1:
-        logger.info("Revoke progress: %%%.0f", this_progress * 100.)
-        progress = this_progress
-    return progress
-
-
-def revokejobs(traceid):
-    return json.loads(''.join(revokejobs_streaming(traceid)))
-
-def run_task(task,
-             args,
-             ):
-    """
-    helper method to run tasks
-    Arguments:
-        task {classobj} -- task class
-        args {dict} -- task args
-    Returns:
-        dict -- success status of task executon
-    """
-    task_instance = task(**args)
-    task_instance.process()
-    task_instance.persist()
-    return task_instance.return_value
 
 class BaseTask(object):
     """

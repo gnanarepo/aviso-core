@@ -1,15 +1,11 @@
 import logging
 import os
-import pprint
-
 import jinja2
 from aviso import settings
 from aviso.settings import sec_context, CNAME_DISPLAY_NAME, CNAME
 from django.core.mail import EmailMultiAlternatives
 from django.core.mail.message import EmailMessage
 
-from utils import diff_rec
-from utils.file_utils import gitbackup_dataset
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -133,24 +129,3 @@ def send_mail2(fname, sender, tolist, is_html=False, **kwargs):
         except Exception as e:
             logger.exception('kwargs %s - %s - subject %s' % (kwargs, e, subject_line))
             raise e
-
-
-def backup_and_mail_changes(old_tdetails, new_tdetails, tenant_name, username, comment, category):
-
-    gitcomment = (comment + " -user:" + username)
-    file_name = "tenantconfig_" + tenant_name + ".json"
-    content = new_tdetails
-    mail_changes = diff_rec(old_tdetails, new_tdetails)
-    if mail_changes:
-        gitbackup_dataset(file_name, content, gitcomment)
-        format_changes = pprint.pformat(mail_changes, indent=2)
-        cname = CNAME_DISPLAY_NAME if CNAME_DISPLAY_NAME else CNAME
-        send_mail2('tenant_config.txt',
-                   'Aviso <notifications@aviso.com>',
-                   new_tdetails.get('receivers', {}).get('dataset_changes', ['gnackers@aviso.com']),
-                   reply_to='Data Science Team <gnackers@aviso.com>',
-                   tenantname=sec_context.name,
-                   comment=comment, changes=format_changes, category=category,
-                   modifier=username, user_name=sec_context.user_name,
-                   cName=cname)
-    return mail_changes

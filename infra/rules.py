@@ -1,24 +1,4 @@
-from infra.read import fetch_node, fetch_ancestors, fetch_children, fetch_descendants
-
-
-def passes_hierarchy_rules(as_of,
-                           node,
-                           segment,
-                           drilldown=True,
-                           db=None,
-                           exclude_display_specific=False, period=None, boundary_dates=None):
-    '''
-    Check if a segment is valid for node (Cached Version)
-    exclude_display_specific : Indicator to exclude display specific rules.
-    '''
-    try:
-        drilldown_record = fetch_node(as_of, node, fields=['normal_segs'], period=period, boundary_dates=boundary_dates)
-        if exclude_display_specific:
-            if segment in drilldown_record['normal_segs']:
-                return True
-        return False
-    except:
-        return False
+from infra.read import fetch_ancestors, fetch_children, fetch_descendants
 
 
 def passes_configured_hierarchy_rules(as_of,
@@ -73,35 +53,6 @@ def passes_configured_hierarchy_rules(as_of,
             return False
 
     return True
-
-
-def node_aligns_to_segment(as_of,
-                           node,
-                           segment,
-                           config,
-                           exclude_display_specific=False,
-                           eligible_nodes_for_segs=None,
-                           period=None,
-                           boundary_dates=None):
-    '''
-        This Function checks if a node satisfies all rules which are configured to a segment
-        as_of: Time_Stamp as_of
-        node: drilldown node
-        segment: segment name
-        config: FMConfig()
-    '''
-    if exclude_display_specific:
-        if eligible_nodes_for_segs:
-            return node in eligible_nodes_for_segs.get(segment, [])
-        return passes_hierarchy_rules(as_of,
-                                      node,
-                                      segment,
-                                      exclude_display_specific=exclude_display_specific, period=period, boundary_dates=boundary_dates)
-    else:
-        return passes_configured_hierarchy_rules(as_of,
-                                                 node,
-                                                 config.segments[segment].get('rules', []),
-                                                 exclude_display_specific=exclude_display_specific, period=period, boundary_dates=boundary_dates)
 
 
 def is_ancestor_of(as_of,
