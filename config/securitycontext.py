@@ -39,7 +39,7 @@ def fix_pyschema():
 
 def initialize_system():
     """Initialize Django and security context"""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aviso.settings')
     django.setup()
 
     from aviso.framework import SecurityContext
@@ -51,7 +51,7 @@ def initialize_system():
     # Settings
     period = '2026Q1'
     user_name = 'waqas.ahmed'
-    tenant_name = 'bmc_m_cache_preprod'
+    tenant_name = 'cisco_qa.com'
 
     # Create tenant with required methods
     class TenantDetails:
