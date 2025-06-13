@@ -4,7 +4,9 @@ import json
 import logging
 import re
 import time
-from datetime import UTC
+from datetime import timezone
+
+UTC = timezone.utc
 
 import pytz
 from aviso.framework import tracer

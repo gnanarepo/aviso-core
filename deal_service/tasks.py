@@ -2,7 +2,7 @@ import logging
 from itertools import groupby
 from operator import itemgetter
 
-from config.fm_config import DealConfig
+from config.deal_config import DealConfig
 from config.periods_config import PeriodsConfig
 from infra.read import (fetch_ancestors, get_available_quarters_and_months,
                         get_period_boundaries, get_period_boundaries_monthly,

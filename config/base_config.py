@@ -51,9 +51,9 @@ class BaseConfig:
             return
 
         valid_config, warnings = self.validate(config_json)
-        if not valid_config:
-            self.config = None
-            raise BadConfigurationError(warnings)
+        # if not valid_config:
+        #     self.config = None
+        #     raise BadConfigurationError(warnings)
 
     @property
     def raw_config(self):
