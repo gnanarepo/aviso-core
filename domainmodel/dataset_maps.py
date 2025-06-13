@@ -6,18 +6,13 @@ from collections import OrderedDict, defaultdict
 
 from aviso.settings import sec_context
 
-from domainmodel.datameta import UIPIterator
 from tasks.fields import parse_field
 from utils import GnanaError
 
 logger = logging.getLogger('gnana.%s' % __name__)
-''' Possible copy_option values '''
 copy_option_values = ['use_last', 'use_first', 'use_NA', 'use_Error']
 
 def build_id_source(key, config, ds):
-    # TODO - Introduce a new type field to specify if a ID Source is a Prepare or Reduce type.
-    # if id_fields in the config not contains primary ID of the Source ds.
-    # then Reduce the uip_obj_list to a single uip_obj
     base_config = SourceMap(key, config)
     if base_config.reln_join_field not in base_config.id_fields:
         return AggregateSourceMap(key, config, ds)
@@ -140,48 +135,6 @@ class SourceMap:
                 map_details['field_info'] = field_info
             map_details['attributes'] = other_attr
             return map_details
-
-    def save_map_details(self, map_def, map_details, dataset_name, comments=''):
-        new_config = self.config_input
-        other_attr = map_details["attributes"]
-        new_config["all_fields"] = other_attr["all_fields"]['value']
-        if 'reduce_maps' in self.config_input.keys():
-            if "id_fields" in self.config_input.keys():
-                new_config['id_fields'] = other_attr["id_fields"]['value']
-        else:
-            data = map_details["field_info"]["data"]
-            fld_defs = self.config_input["fields_config"]
-            new_fld_defs = {}
-            for d in data:
-                if d["out_fld"] in fld_defs.keys():
-                    new_fld_defs[d["out_fld"]] = fld_defs[d["out_fld"]]
-                else:
-                    new_fld_defs[d["out_fld"]] = {}
-
-                if d["out_fld"] != d["in_fld"][0]:
-                    if d["in_fld"][0] != '' and d["in_fld"][0] != '-':
-                        new_fld_defs[d["out_fld"]]["in_fld"] = d["in_fld"][0]
-                    else:
-                        if "in_fld" in new_fld_defs[d["out_fld"]].keys():
-                            del new_fld_defs[d["out_fld"]]["in_fld"]
-
-                if d["parser_fallback_lambda"] != '' and d["parser_fallback_lambda"] != '-':
-                    new_fld_defs[d["out_fld"]]["parser_fallback_lambda"] = d["parser_fallback_lambda"]
-                else:
-                    if "parser_fallback_lambda" in new_fld_defs[d["out_fld"]].keys():
-                        del new_fld_defs[d["out_fld"]]["parser_fallback_lambda"]
-                if d["parser"] != '' and d["parser"] != '-':
-                    new_fld_defs[d["out_fld"]]["parser"] = d['parser']
-                else:
-                    if "parser" in new_fld_defs[d["out_fld"]].keys():
-                        del new_fld_defs[d["out_fld"]]["parser"]
-
-                new_config["fields_config"] = new_fld_defs
-
-        from feature import Feature
-        Feature().commit_dataset_config_changes(dataset_name, 'ConfigUI',
-                                                [('set_value', 'maps.' + map_def, new_config)],
-                                                comments)
 
     def get_source_ds_fields(self):
         source_flds = {}
@@ -333,20 +286,6 @@ class PrepareSourceMap(SourceMap):
         uip_obj.compress(field_list)
         return uip_obj
 
-    def pre_cache(self, cache_options):
-        self.cache_options = cache_options
-
-    def get_records(self):
-        record_iterator = UIPIterator(self.cache_options.src_uip_ds,
-                                      {'object.extid': {'$in': self.cache_options.source_id_list}},
-                                      None)
-
-        for record in record_iterator:
-            uip_obj = self.build_uip_obj(record)
-            features = record.all_features()
-            self.apply_fields_config(uip_obj, features)
-            yield uip_obj
-
 
 class AggregateSourceMap(SourceMap):
     def __init__(self, fn_def_params, config, ds=None):
@@ -355,21 +294,6 @@ class AggregateSourceMap(SourceMap):
         # Override the batchsize as all the processing should happen in a
         # single batch for the reduce to work
         self.batch_size = None
-
-    def pre_cache(self, cache_options):
-        record_iterator = UIPIterator(cache_options.src_uip_ds,
-                                      {'object.extid': {'$in': cache_options.source_id_list}},
-                                      None)
-        for record in record_iterator:
-            uip_obj = self.build_uip_obj(record)
-            features = record.all_features()
-            self.apply_fields_config(uip_obj, features)
-            self.uip_reduce_dict['~'.join([str(uip_obj.getLatest(x))
-                                           for x in self.id_fields])].append(uip_obj)
-
-    def get_records(self):
-        for extid, uip_obj_list in self.uip_reduce_dict.iteritems():
-            yield extid, uip_obj_list
 
     def _aggregate(self, extid, uip_obj_list):
         if self.reln_join_field not in self.id_fields:

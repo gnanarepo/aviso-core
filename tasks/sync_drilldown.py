@@ -4,10 +4,10 @@ from aviso.settings import sec_context
 from pymongo import UpdateOne
 
 from config import HierConfig
-from config.fm_config import FMConfig
-from config.hier_config import DRILLDOWN_BUILDERS
-from config.periods_config import PeriodsConfig
-from infra import DRILLDOWN_COLL
+from config import FMConfig
+from config import DRILLDOWN_BUILDERS
+from config import PeriodsConfig
+from infra.constants import DRILLDOWN_COLL
 from infra.read import (fetch_descendant_ids, fetch_hidden_nodes,
                         fetch_node_to_parent_mapping_and_labels,
                         fetch_top_level_nodes, get_as_of_dates,
@@ -442,13 +442,13 @@ class _SyncDrilldown(BaseTask):
                       service=self.service)
 
         try:
-            if (len(self.deleted_nodes) or len(self.created_nodes)\
+            if (len(self.deleted_nodes) or len(self.created_nodes)
                     or len(self.resurrected_nodes) or len(self.moved_nodes)):
                 fm_config = FMConfig()
                 if fm_config.snapshot_feature_enabled:
                     nodes_having_changes = self.deleted_nodes|set(self.created_nodes.keys())|self.resurrected_nodes|set(self.moved_nodes.keys())
-                    from fm_service.forecast_schedule import FMScheduleClass
-                    fm_schedule_class = FMScheduleClass(self.period, list(nodes_having_changes))
+                    from fm_service.forecast_schedule import FMSchedule
+                    fm_schedule_class = FMSchedule(self.period, list(nodes_having_changes))
                     fm_schedule_class.update_fm_schedule()
         except Exception as e:
             logger.exception(e)
@@ -563,8 +563,8 @@ class _SyncDrilldown(BaseTask):
                 fm_config = FMConfig()
                 nodes_having_changes = self.deleted_nodes_versioned[prd]|set(self.created_nodes_versioned[prd].keys())|self.resurrected_nodes_versioned[prd]|set(self.moved_nodes_versioned[prd].keys())
                 if fm_config.snapshot_feature_enabled:
-                    from fm_service.forecast_schedule import FMScheduleClass
-                    fm_schedule_class = FMScheduleClass(self.period, nodes_having_changes)
+                    from fm_service.forecast_schedule import FMSchedule
+                    fm_schedule_class = FMSchedule(self.period, nodes_having_changes)
                     fm_schedule_class.update_fm_schedule()
         except Exception as e:
             logger.exception(e)

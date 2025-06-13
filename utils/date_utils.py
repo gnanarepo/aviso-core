@@ -7,7 +7,6 @@ from itertools import chain
 import pytz
 from aviso.settings import sec_context, CNAME
 
-from domainmodel.csv_data import CSVDataClass
 from .cache_utils import memcached, memcacheable
 from .relativedelta import relativedelta
 
@@ -585,20 +584,6 @@ def next_period_by_epoch(epoch_time, period_type='Q', skip=1, count=1):
 def prev_period_by_epoch(epoch_time, period_type='Q', skip=1, count=1):
     return period_details(epoch2datetime(epoch_time), period_type, delta=-skip, count=count)
 
-
-def is_same_day(first, second):
-    """
-    Accepts two dates in epoch and tells whether they fall on the same day.
-    """
-    if first is None or second is None:
-        return False
-    first_dt = first.as_datetime()
-    second_dt = second.as_datetime()
-    if (first_dt.year, first_dt.month, first_dt.day) == (second_dt.year, second_dt.month, second_dt.day):
-        return True
-    else:
-        return False
-
 def get_eom(ep):
     """
     get end of month
@@ -623,24 +608,6 @@ def get_eod(ep):
     eod = tzinfo.localize(eod, is_dst=tzinfo.dst(eod))
     return epoch(eod)
 
-
-def get_eoq_for_period(period, period_info, return_type='str'):
-    """
-    get end of period based on period and period_info
-    """
-    if len(period) == 4:
-        if return_type == 'datetime':
-            return epoch(current_period(period_info[0].begin, 'Y').end).as_datetime()
-        return str(epoch(current_period(period_info[0].begin,'Y').end))
-    if 'Q' not in period:
-        return None
-    for p in period_info:
-        if p.mnemonic == period:
-            if return_type == 'datetime':
-                return epoch(p.end).as_datetime()
-            return str(epoch(p.end))
-    return None
-
 def prev_period(a_datetime=None, period_type='Q', skip=1, count=1):
     return period_details(a_datetime, period_type, delta=-skip, count=count)
 
@@ -653,26 +620,6 @@ def prev_periods_allowed_in_deals():
             if j not in prev_periods:
                 prev_periods.append(prev_period(period_type='Q', skip=j + (4 * i)).mnemonic)
     return prev_periods
-
-def get_nested_with_placeholder(input_dict, nesting, placeholder_dict, default=None):
-    """
-    get value (or dict) from nested dict by specifying the levels to go through
-    """
-    if not nesting:
-        return input_dict
-    try:
-
-        for level in nesting[:-1]:
-            input_dict = input_dict.get(level % placeholder_dict, {})
-
-        return input_dict.get(nesting[-1], default)
-    except AttributeError:
-        # Not a completely nested dictionary
-        return default
-
-@memcached
-def get_all_periods__m(period_type, filt_out_qs=None):
-    return get_all_periods(period_type, filt_out_qs)
 
 def period_rng_from_mnem(mnemonic):
     # using tuples instead of namedtuples in here because this is performance critical
@@ -716,39 +663,6 @@ def period_rng_from_mnem(mnemonic):
         else:
             raise Exception("No match for mnemonic: %s", mnemonic)
 
-def get_bow2(ep):
-    """
-    Compute the weekly boundary (get_bow) timestamp for STLY/STLQ calculations.
-
-    For Sunday, Monday, Tuesday, return the previous Saturday's EOD.
-    For Wednesday, Thursday, Friday, Saturday, return the upcoming Saturday's EOD.
-
-    Parameters:
-        ep: An epoch instance that provides an `as_datetime()` method.
-
-    Returns:
-        An epoch instance representing the boundary of the week, set to Saturday 23:59:59.999.
-    """
-    # Convert epoch to datetime
-    epdt = ep.as_datetime()
-    # Python's weekday: Monday=0, Tuesday=1, ... Saturday=5, Sunday=6
-    w = epdt.weekday()
-
-    if w in [6, 0, 1]:
-        # For Sunday (6), Monday (0), Tuesday (1), return previous Saturday's date.
-        # Calculate days to subtract: (w - 5) mod 7 gives: for Sunday: 1, Monday: 2, Tuesday: 3.
-        delta = (w - 5) % 7
-        boundary_dt = epdt - timedelta(days=delta)
-    else:
-        # For Wednesday (2), Thursday (3), Friday (4), Saturday (5), return upcoming Saturday.
-        # Calculate days to add: (5 - w) mod 7 gives: for Wednesday: 3, Thursday: 2, Friday: 1, Saturday: 0.
-        delta = (5 - w) % 7
-        boundary_dt = epdt + timedelta(days=delta)
-
-    # Set the time to 23:59:59.999 (using 999000 microseconds)
-    boundary_dt = boundary_dt.replace(hour=23, minute=59, second=59, microsecond=999000)
-    return epoch(boundary_dt)
-
 def get_week_ago(ep):
     """
     get date a week ago from epoch, returns an epoch
@@ -777,23 +691,6 @@ def get_boq(ep):
     """
     period_info = period_details(ep.as_datetime())
     return epoch(period_info.begin)
-
-
-def lazy_get_boq(ep):
-    """
-    get inexact beginning of quarter by going back 90 days, returns an epoch
-    """
-    day = ep.as_datetime()
-    return epoch(day.replace(minute=0, second=0) - timedelta(days=90))
-
-
-def get_eoq(ep):
-    """
-    get end of period from epoch, returns an epoch
-    """
-    period_info = period_details(ep.as_datetime())
-    return epoch(period_info.end)
-
 
 def get_future_bom(ep, delta=None, months=0):
     """
@@ -903,7 +800,7 @@ def get_weekly_periods_info_in_quarter(q_mnemonic, today_epoch):
         dict: A dictionary mapping weekly period mnemonics to their details.
     """
 
-    from config.periods_config import PeriodsConfig
+    from config import PeriodsConfig
     from infra.read import render_period
 
     period_config = PeriodsConfig()
@@ -934,6 +831,7 @@ def get_now(verbose=False,):
     if not verbose and not is_demo():
         return epoch()
     tc = sec_context.details.get_config(category='forecast', config_name='tenant')
+    from domainmodel.csv_data import CSVDataClass
     BookingsCacheClass = CSVDataClass(BOOKINGS_CACHE_TYPE,
                                       BOOKINGS_CACHE_SUFFIX)
 
@@ -1029,7 +927,7 @@ def rng_from_prd_str(std_prd_str, fmt='epoch', period_type='Q', user_level=False
     return the boundaries of that period as a tuple of (begin, end)"""
 
     if user_level:
-        from config.periods_config import PeriodsConfig
+        from config import PeriodsConfig
         periodconfig = PeriodsConfig()
         from infra.read import get_now as infra_get_now
         today = infra_get_now(periodconfig)
@@ -1123,7 +1021,7 @@ def rng_from_prd_str(std_prd_str, fmt='epoch', period_type='Q', user_level=False
             if day_of_week in cur_week_days:
                 target_week_status.append('c')
 
-            from config.periods_config import PeriodsConfig
+            from config import PeriodsConfig
             from infra.read import render_period
             periodconfig = PeriodsConfig()
             current_p = current_period().mnemonic

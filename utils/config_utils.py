@@ -2,8 +2,6 @@ import logging
 from aviso.settings import sec_context
 
 import copy
-import bson
-from utils.constants import PRIVATE_MOXTRA_URL, PUBLIC_MOXTRA_URL
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -87,83 +85,3 @@ def config_pattern_expansion(attrs):
         return None
     get_keys(attrs, attrs, 'attrs', '')
     return {'attrs': attrs, 'eval_errs': eval_errs}
-
-
-def err_format(eval_errors):
-    if not eval_errors:
-        return '\n'
-    errstr = '\n \nThese are the fields bypassed by the evaluation due to save_on_error . \n '
-    for key in eval_errors.keys():
-        errstr = errstr+'destination = '+key+'\n'
-        errstr = errstr+'expression = '+str(eval_errors[key][0])+'\n'
-        errstr = errstr+'message_list = '+str(eval_errors[key][1])+'\n\n'
-    return errstr
-
-
-def get_max_allowed_batch_size(list_of_records, model):
-    model_config = sec_context.details.get_config('compressed_model', model, dict())
-    if not model_config:
-        b = bson.BSON()
-        size = len(b.encode(dict(list_of_records=list_of_records)))
-        num = len(list_of_records)
-        max_size = 16 * 1024 * 1024
-        if size < max_size:
-            batch = num
-        else:
-            safefy_limit = 0.9
-            single = (size * 1.0) / num
-            batch = int((max_size / single) * safefy_limit)
-        model_config = dict(max_allowed = batch)
-        try:
-            sec_context.details.set_config('compressed_model', model, model_config)
-        except Exception as e:
-            logger.warning("warn: failed to set model %s config %s", model, e)
-        try:
-            sec_context.details.set_config('compressed_model', "migrated", True)
-        except Exception as e:
-            logger.warning("warn: failed to set Migrated config %s", e)
-    return model_config.get('max_allowed', 10000)
-
-
-def get_moxtra_url(guest=None, domain=None):
-    is_moxtra_public = False
-    try:
-        is_moxtra_public = sec_context.details.get_config('collaboration',
-                                                          'is_public',
-                                                          False)
-    except Exception as mex:
-        if guest and domain and ".aviso.com" in domain:
-            try:
-                tenant_splt = domain.split(".aviso.com")[0].split(".")
-                if len(tenant_splt) == 2:
-                    tenant_name = tenant_splt[0].replace("-", "_")
-                    from domainmodel.tenant import Tenant
-                    tenants_list = Tenant.getDistinctValues("name")
-                    for t_name in tenants_list:
-                        if t_name.startswith(tenant_name):
-                            sec_context.set_context("local_cache", t_name, t_name)
-                            is_moxtra_public = sec_context.details.get_config('collaboration', 'is_public', False)
-                            break
-            except:
-                pass
-    config_private_url = None
-    config_public_url = None
-    if not guest:
-        try:
-            from config.fm_config import FMConfig
-            fm_config = FMConfig()
-            config_private_url = fm_config.get_moxtra_private_url
-            config_public_url = fm_config.get_moxtra_public_url
-        except:
-            pass
-    if is_moxtra_public:
-        if config_public_url:
-            moxtra_url = config_public_url
-        else:
-            moxtra_url = PUBLIC_MOXTRA_URL
-    else:
-        if config_private_url:
-            moxtra_url = config_private_url
-        else:
-            moxtra_url = PRIVATE_MOXTRA_URL
-    return moxtra_url
