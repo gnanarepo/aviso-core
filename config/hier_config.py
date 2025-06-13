@@ -1194,15 +1194,6 @@ class HierConfig(BaseConfig):
         return self.config.get('versioned', False)
 
     @cached_property
-    def sort_system_nodes(self):
-        """
-        push system nodes to the end of the hierarchy
-        Returns:
-            bool
-        """
-        return self.config.get('sort_system_nodes', False)
-
-    @cached_property
     def logger_draw_tree(self):
         """
         Enable or disable the draw tree function.
@@ -1213,9 +1204,6 @@ class HierConfig(BaseConfig):
         """
         return self.config.get('logger_draw_tree',True)
 
-    #
-    # Hierarchy Configuration
-    #
     @cached_property
     def hierarchy_builder(self):
         """
@@ -1295,38 +1283,6 @@ class HierConfig(BaseConfig):
         return {drilldown: dd_dtls['num_levels'] for drilldown, dd_dtls in self.config.get('drilldowns', {}).items()
                 if dd_dtls['drilldown_builder'] == 'deal_partial_hier'}
 
-    @cached_property
-    def hier_display_order(self):
-        """
-        display order for hierarchies in ui
-
-        Returns:
-           list -- [root node ids]
-        """
-        return self.config.get('hierarchy_display_order', [])
-
-    @cached_property
-    def pivot_and_root_node_mapping(self):
-        """
-        pivot and root node mapping
-
-        Returns:
-           dict -- {pivot1: root_node_of_pivot1,
-                    pivot2: root_node_of_pivot2}
-        """
-        return self.config.get('pivot_map', {})
-
-    @cached_property
-    def hierarchy_editable(self):
-        if self.hierarchy_builder == 'collab_fcst':
-            return False
-        if all(dd_dtls['drilldown_builder'] == 'deal_only' for dd_dtls in self.config.get('drilldowns', {}).values()):
-            return False
-        return True
-
-    #
-    # Validation
-    #
     def validate(self, config):
         dummy_tenant = config.get('dummy_tenant', False)
         hier_builder = config.get('hierarchy_builder')

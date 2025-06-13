@@ -1,9 +1,12 @@
+import logging
+import time
 from datetime import datetime
 from itertools import chain, combinations
 
 from aviso.settings import sec_context
 from operator import lt, gt, le, ge, itemgetter
 
+logger = logging.getLogger('aviso-core.%s' % __name__)
 range_lambdas = {}
 
 CURR_TABLE = {'USD':'$', 'CAD': '$', 'GBP':u'\xa3','JPY':u'\xa5',
@@ -409,3 +412,248 @@ def prune_pfx(fld):
         return fld[7:]
     else:
         return fld
+
+def update_rtfm_flag(td, last_exec_time=None, fastlane_sync_until=None, chipotle_last_exec_time=None, eoq_time=None, period=None, status='active'):
+    t_fl = td.get_flag('molecule_status', 'rtfm')
+    if last_exec_time:
+        from utils.date_utils import epoch
+        t_fl['last_execution_time'] = last_exec_time
+        t_fl['ui_display_time'] = epoch().as_epoch()#Just to know when the chipotle was completed
+        logger.info("UI time updated as %s" %t_fl['ui_display_time'])
+    if fastlane_sync_until:
+        t_fl['fastlane_sync_until'] = fastlane_sync_until
+    if chipotle_last_exec_time:
+        t_fl['chipotle_last_execution_time'] = chipotle_last_exec_time
+    if eoq_time and period:
+        t_fl[period+'_eoq_time'] = eoq_time
+        if not t_fl[period+'_eoq_time']:
+            t_fl[period+'_eoq_time'] = {}
+        t_fl[period+'_eoq_time'] = eoq_time
+    t_fl['status'] = status
+    logger.info("Updating the rtfm flag : %s " % t_fl)
+    td.set_flag('molecule_status', 'rtfm', t_fl)
+
+def update_stats(params, status='started', event_type='all_caches', etl_time=None):
+    from aviso.framework import tracer
+    from aviso.settings import CNAME
+    from gnana.events import EventBus
+    EVENT_BUS = EventBus()
+    if params.get('etl_time'):
+        if 'start_time' not in params:
+            params['start_time'] = int(time.time() * 1000)
+        payload_data = {'service': CNAME,
+                        'stack': CNAME,
+                        'parent_task': 'caches',
+                        'tenant': sec_context.name,
+                        'run_type': params.get('run_type', 'daily'),
+                        'etl_time': etl_time if etl_time else params.get('etl_time'),
+                        'main_id': params.get('etl_time'),
+                        'event_type': event_type,
+                        'times': {'start_time' : params['start_time']},
+                        'time_taken': 0,
+                        'status': status,
+                        'trace_id': tracer.trace}
+        if status != 'started':
+            payload_data['time_taken'] = (time.time() * 1000 - params['start_time']) / 1000
+        if event_type == 'all_caches' and status in ['finished', 'skipped', 'veto']:
+            payload_data['end_time'] = time.time() * 1000
+            tdetails = sec_context.details
+            if status in ['finished', 'veto']:
+                mol_stat = tdetails.get_flag('molecule_status', 'rtfm')
+                payload_data['UI_time'] = mol_stat.get('last_execution_time')
+        if status == 'failed':
+            payload_data['end_time'] = time.time() * 1000
+        logger.info("payload data %s ", payload_data)
+        EVENT_BUS.publish("$Stats", **payload_data)
+    else:
+        logger.info("stats were not published")
+
+def _get_daily_trace_date():
+    try:
+        return sec_context.details.get_flag('molecule', 'daily_last_execution_date', 0)
+    except:
+        return None
+
+def _set_daily_trace_date(value):
+    try:
+        return sec_context.details.set_flag('molecule', 'daily_last_execution_date', value)
+    except:
+        return None
+
+
+def _get_snapshot_trace_datetime():
+    try:
+        return sec_context.details.get_flag('molecule', 'snapshot_trace_execution_date', 0)
+    except:
+        return None
+
+def _set_snapshot_trace_datetime(value):
+    try:
+        return sec_context.details.set_flag('molecule', 'snapshot_trace_execution_date', value)
+    except:
+        return None
+
+def check_trace(params, trace_name='chipotle_trace', report='all_caches'):
+    retry = 0
+    from aviso.framework import tracer
+    t = sec_context.details
+    caches_trace = None
+    etl_time = params.get('etl_time')
+    run_type = params.get('run_type', 'chipotle')
+    is_eoq_run = params.get("is_eoq_run", False)
+    if is_eoq_run:
+        return True, tracer.trace
+    wait_time = t.get_flag('chipotle', 'wait_time_min', 10)
+    if run_type == 'daily':
+        wait_time = 60
+    while  retry <= wait_time:
+        caches_trace = t.get_flag('molecule', trace_name, 'finished')
+        if caches_trace in ['finished', tracer.trace]:
+            t.set_flag('molecule', trace_name, tracer.trace)
+            break
+        elif trace_name == 'daily_trace':
+            from utils.date_utils import epoch
+            as_of = epoch().as_datetime()
+            as_of_date = as_of.strftime("%Y-%m-%d")
+            daily_run_date = _get_daily_trace_date()
+            if not daily_run_date or (daily_run_date and daily_run_date < as_of_date):
+                _set_daily_trace_date(as_of_date)
+                t.set_flag('molecule', trace_name, tracer.trace)
+                break
+        elif trace_name == 'snapshot_trace':
+            from utils.date_utils import epoch
+            as_of = epoch().as_datetime()
+            as_of_date = as_of.strftime("%Y-%m-%d")
+            snapshot_trace_run_datetime = _get_snapshot_trace_datetime()
+            if snapshot_trace_run_datetime:
+                snapshot_run_date = epoch(_get_snapshot_trace_datetime()).as_datetime().strftime("%Y-%m-%d")
+                if not snapshot_run_date or (snapshot_run_date and snapshot_run_date < as_of_date):
+                    _set_snapshot_trace_datetime(epoch().as_epoch())
+                    t.set_flag('molecule', trace_name, tracer.trace)
+                    break
+            else:
+                _set_snapshot_trace_datetime(epoch().as_epoch())
+                t.set_flag('molecule', trace_name, tracer.trace)
+                break
+
+        logger.info("%s are running by other tasks %s waiting for 1 min", report, caches_trace)
+        time.sleep(60)
+        retry += 1
+    else:
+        update_stats(params, 'skipped', report, etl_time)
+        logger.error("waited for %s min, %s will taken care by next event, %s is %s", wait_time, report, trace_name, caches_trace)
+        return False, caches_trace
+    return True, tracer.trace
+
+def update_trace(trace_name='chipotle_trace', trace_id=None, force_update=False):
+    from aviso.framework import tracer
+    t = sec_context.details
+    if force_update:
+        t.set_flag('molecule', trace_name, 'finished')
+        return
+    if not trace_id:
+        trace_id = tracer.trace
+    if t.get_flag('molecule', trace_name, 'finished') == trace_id:
+        t.set_flag('molecule', trace_name, 'finished')
+        if trace_name == 'snapshot_trace':
+            from utils.date_utils import epoch
+            _set_snapshot_trace_datetime(epoch().as_epoch())
+
+def describe_trend(val):
+    if val in [0, None]:
+        return 'no_arrow', 'no difference to', 'ok'
+    if val < 0:
+        return 'down_arrow', 'below', 'bad'
+    elif val > 0:
+        return 'up_arrow', 'above', 'good'
+    return 'no_arrow', 'no difference to', 'ok'
+
+def mongify_field(field, no_replace_quote=False):
+    if isinstance(field, str):
+        return field.replace('.', '|') if no_replace_quote else field.replace('.', '|').replace("'", "#")
+    if isinstance(field, int):
+        return field
+    if type(field) is list:
+        return [mongify_field(x, no_replace_quote) for x in field]
+    if type(field) is tuple:
+        return tuple(mongify_field(x, no_replace_quote) for x in field)
+    if type(field) is set:
+        return {mongify_field(x, no_replace_quote) for x in field}
+
+def unmongify_field(field):
+    # return field.replace("#", "'").replace('|', '.')
+    if isinstance(field, str):
+        return field.replace("#", "'").replace('|', '.')
+    if isinstance(field, int):
+        return field
+    if type(field) is list:
+        return [unmongify_field(x) for x in field]
+    if type(field) is tuple:
+        return tuple(unmongify_field(x) for x in field)
+    if type(field) is set:
+        return {unmongify_field(x) for x in field}
+
+def mongify_dict(dct):
+    copy = {}
+    for k, v in dct.iteritems():
+        if type(v) is dict:
+            copy.update({mongify_field(k): mongify_dict(v)})
+        else:
+            copy.update({mongify_field(k): mongify_field(v)})
+    return copy
+
+def unmongify_dict(d):
+    copy = {}
+    for k, v in d.iteritems():
+        if type(v) is dict:
+            copy.update({unmongify_field(k): unmongify_dict(v)})
+        else:
+            copy.update({unmongify_field(k): unmongify_field(v)})
+    return copy
+
+def create_nested(input_dict, attr_list):
+    """
+    create a value from nested input dict by specifying the levels to go through and write it to output dict
+    """
+    if not attr_list:
+        return None
+    try:
+
+
+        val = get_nested(input_dict, attr_list)
+
+        dict_by_level = val
+        for key in reversed(attr_list):
+            dict_by_level = {key: dict_by_level}
+
+        return dict_by_level
+    except AttributeError:
+        # Not a completely nested dictionary
+        return None
+
+def adorn_dlf_fcst(deal, dlf_fcst_coll_schema):
+    """
+    Create deal level dlf_fcst collection required information
+    """
+    try:
+        dlf_fcst_record = {'criteria': {'period': deal['period'],
+                                        'opp_id': deal['opp_id']},
+                                        'set': {}}
+        for attr in dlf_fcst_coll_schema:
+            attr_as_list = attr.split('.')
+            # TODO: The limitation with the below code is if there is are 2 nestings i.e, dlf.in_fcst and dlf.fcst_flag,
+            # the dlf.in_fcst will be removed and dlf.fcst_flag will be added
+            if len(attr_as_list) > 0:
+                dlf_fcst_record['set']= dict(dlf_fcst_record['set'], **create_nested( deal, attr_as_list))
+            else:
+                dlf_fcst_record['set'][attr_as_list[0]] = deal[attr_as_list[0]]
+
+        return dlf_fcst_record
+    except:
+        return None
+
+def get_last_execution_time():
+    try:
+        return sec_context.details.get_flag('molecule_status', 'rtfm', {}).get('chipotle_last_execution_time', 0)
+    except:
+        return 0

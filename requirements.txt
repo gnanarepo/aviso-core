@@ -32,6 +32,7 @@ Pygments==2.19.1
 pymongo==4.13.0
 pytest==8.4.0
 python-dateutil==2.9.0.post0
+python-dotenv==1.1.0
 pytz==2025.2
 s3transfer==0.13.0
 six==1.17.0
@@ -42,4 +43,3 @@ tzdata==2025.2
 urllib3==2.4.0
 vine==5.1.0
 wcwidth==0.2.13
--e git+git@github.com:gnanarepo/eventbus.git@v1.0#egg=eventbus
