@@ -10,7 +10,7 @@ import pytz
 from aviso import settings
 from aviso.settings import sec_context, gnana_db
 
-from domainmodel import Model
+from domainmodel.model import Model
 from tasks.fields import yyyymmdd_to_xl
 from utils import GnanaError
 from utils.date_utils import get_a_date_time_as_float_some_how, datetime2xl, epoch, xl2datetime

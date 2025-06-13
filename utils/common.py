@@ -1,6 +1,3 @@
-from aviso.framework.views import GnanaView
-
-
 class weekday:
     __slots__ = ["weekday", "n"]
 

@@ -1,7 +1,7 @@
 import datetime
 import json
 import logging
-from datetime import UTC
+from datetime import timezone as UTC
 from aviso.framework import tracer
 from aviso.settings import (POOL_PREFIX, WORKER_POOL, adhoc_task_validity,
                             archive_analyticengine_validity, gnana_db2,
@@ -14,7 +14,7 @@ from aviso.settings import (POOL_PREFIX, WORKER_POOL, adhoc_task_validity,
                             taskactive_validity, archive_task_validity)
 from celery import current_task
 
-from domainmodel import Model
+from domainmodel.model import Model
 from utils import date_utils
 logger = logging.getLogger('gnana.%s' % __name__)
 

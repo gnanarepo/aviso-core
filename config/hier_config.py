@@ -8,7 +8,7 @@ from itertools import product
 from aviso.settings import sec_context
 
 from fake_data.fake_data import COMPANIES
-from infra import HIER_COLL
+from infra.constants import HIER_COLL
 from infra.mongo_utils import create_collection_checksum
 from infra.read import get_period_and_close_periods, get_period_infos, get_as_of_dates, get_period_begin_end, \
     fetch_node_to_parent_mapping_and_labels

@@ -9,7 +9,7 @@ from aviso.settings import sec_context
 from utils.date_utils import epoch, rng_from_prd_str
 from utils.misc_utils import get_nested, inrange, try_float, try_index
 
-from . import AUDIT_COLL, FILTS_COLL
+from .constants import AUDIT_COLL, FILTS_COLL
 
 
 NEGATION_MAP = {'$gt': '$lte', '$gte': '$lt', '$lte': '$gt', '$lt': '$gte'}

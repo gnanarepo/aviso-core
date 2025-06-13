@@ -1,5 +1,5 @@
 import hashlib
-from domainmodel import Model
+from domainmodel.model import Model
 from utils import GnanaError
 from aviso.settings import sec_context, gnana_db2, gnana_db, sec_context
 

@@ -7,7 +7,7 @@ import threading
 import time
 import traceback
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, timezone as UTC
 
 from aviso.framework import tracer
 from aviso.framework.diagnostics import probe_util

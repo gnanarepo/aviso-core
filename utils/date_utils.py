@@ -7,7 +7,6 @@ from itertools import chain
 import pytz
 from aviso.settings import sec_context, CNAME
 
-from domainmodel.csv_data import CSVDataClass
 from .cache_utils import memcached, memcacheable
 from .relativedelta import relativedelta
 
@@ -832,6 +831,7 @@ def get_now(verbose=False,):
     if not verbose and not is_demo():
         return epoch()
     tc = sec_context.details.get_config(category='forecast', config_name='tenant')
+    from domainmodel.csv_data import CSVDataClass
     BookingsCacheClass = CSVDataClass(BOOKINGS_CACHE_TYPE,
                                       BOOKINGS_CACHE_SUFFIX)
 

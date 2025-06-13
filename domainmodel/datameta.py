@@ -12,7 +12,7 @@ from aviso.settings import (CNAME, DEBUG, global_cache, gnana_db, gnana_db2,
                             local_db, sec_context)
 from django.http.response import HttpResponseNotFound
 
-from domainmodel import Model, ModelError
+from domainmodel.model import Model, ModelError
 from domainmodel.uip import (InboxEntry, InboxFileEntry, PartitionData,
                              UIPRecord)
 from utils import GnanaError, forwardmap, update_dict

@@ -4,7 +4,6 @@ from collections import namedtuple
 from functools import wraps
 
 import numpy as np
-from aviso.framework.metric_logger import NOOPMetricSet
 from aviso.settings import sec_context
 from infra.constants import DEALS_COLL, NEW_DEALS_COLL
 from tasks.hierarchy.hierarchy_utils import get_user_permissions
