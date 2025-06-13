@@ -8,7 +8,7 @@ import threading
 import time
 import traceback
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 import celery
 from _collections import defaultdict
@@ -28,6 +28,8 @@ from utils import date_utils, file_utils, memory_usage_resource
 from utils.common import cached_property
 
 logger = logging.getLogger('gnana.%s' % __name__)
+
+UTC = timezone.utc
 
 task_statuses = {
     0: 'Created',

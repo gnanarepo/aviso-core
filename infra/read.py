@@ -9,12 +9,12 @@ from itertools import product
 
 import numpy as np
 import pandas as pd
-from aviso.framework.metric_logger import NOOPMetricSet
+from utils.metriclogger import NOOPMetricSet
 from aviso.settings import sec_context
 from bson.objectid import ObjectId
 from dateutil.rrule import WEEKLY, rrule
 
-from config.fm_config import DealConfig
+from config.deal_config import DealConfig
 from infra import (DEALS_COLL, FAVS_COLL, GBM_CRR_COLL, NEW_DEALS_COLL,
                    QUARTER_COLL)
 from infra.fetch_helper import modify_hint_field

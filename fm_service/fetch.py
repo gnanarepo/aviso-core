@@ -4,7 +4,7 @@ import logging
 from aviso.framework.views import GnanaView
 from aviso.settings import sec_context
 
-from config.fm_config import DealConfig
+from config.deal_config import DealConfig
 from fm_service import FMView, node_can_access_field, period_is_valid
 from infra.read import (fetch_boundry, fetch_eligible_nodes_for_segment,
                         fetch_users_nodes_and_root_nodes, get_current_period,

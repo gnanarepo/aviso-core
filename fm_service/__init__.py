@@ -1,6 +1,7 @@
 from django.http import HttpResponseBadRequest
 
-from config.fm_config import DealConfig, FMConfig
+from config.fm_config import FMConfig
+from config.deal_config import DealConfig
 from infra.read import get_current_period, node_is_valid
 from infra.read import period_is_active as active_period
 from infra.read import validate_period

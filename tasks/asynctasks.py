@@ -1,6 +1,6 @@
 import datetime
 import logging
-from datetime import UTC
+from datetime import timezone as UTC
 
 from aviso.framework import tracer
 from aviso.framework.diagnostics import probe_util
