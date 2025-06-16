@@ -20,8 +20,8 @@ def fix_pyschema():
             for line in file:
                 if line.strip() == 'from core import ParseError, Field, auto_store, PySchema':
                     print('from .core import ParseError, Field, auto_store, PySchema')
-                elif line.strip() == 'import core':
-                    print('from . import core')
+                elif line.strip() == 'from core import auto_store':
+                    print('from .core import auto_store')
                 else:
                     print(line, end='')
 
@@ -39,7 +39,7 @@ def fix_pyschema():
 
 def initialize_system():
     """Initialize Django and security context"""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aviso.settings')
     django.setup()
 
     from aviso.framework import SecurityContext
@@ -51,27 +51,45 @@ def initialize_system():
     # Settings
     period = '2026Q1'
     user_name = 'waqas.ahmed'
-    tenant_name = 'netapp.com'
+    tenant_name = 'cisco_qa.com'
+    # tenant_name = 'cisco_qa_cache_preprod'
+
+    # Create tenant with required methods
+    class TenantDetails:
+        def __init__(self, name, period):
+            self.name = name
+            self.period = period
+            self._configs = {
+                'micro_app': {
+                    'deal_config': {},
+                    'hier_config': {},
+                    'periods_config': {}
+                }
+            }
+
+        def get_config(self, category, config_name):
+            return self._configs.get(category, {}).get(config_name, {})
+
+        def set_config(self, category, config_name, value):
+            if category not in self._configs:
+                self._configs[category] = {}
+            self._configs[category][config_name] = value
+
+        def get_all_config(self):
+            return self._configs
+
+    # Create tenant details instance
+    tenant_details = TenantDetails(tenant_name, period)
 
     # Initialize thread local storage
     if not hasattr(security_context, 'thread_local'):
         security_context.thread_local = threading.local()
 
-    # Create tenant
-    tenant = Tenant()
-    tenant.name = tenant_name
-    tenant.period = period
-    tenant.flags = {
-        'molecule_status': {
-            'rtfm': {}
-        }
-    }
-
     # Set thread local attributes
     security_context.thread_local.tenant_used_for_db = tenant_name
-    security_context.thread_local.tenant_db = f"{tenant_name}_db"
-    security_context.thread_local.tenant_details = tenant
-    security_context.tenant_details = tenant
+    security_context.thread_local.tenant_db = f"{tenant_name}"
+    security_context.thread_local.tenant_details = tenant_details
+    security_context.thread_local.details = tenant_details
 
     # Set context
     security_context.set_context(
@@ -83,25 +101,32 @@ def initialize_system():
         csv_version_info={}
     )
 
+    # Update the global sec_context
+    from aviso import settings
+    settings.sec_context = security_context
+
     return security_context
 
 if __name__ == '__main__':
     try:
         fix_pyschema()
-
         security_context = initialize_system()
 
-        # Step 4: Print verification info
-        print("Security Context Name:", security_context.name)
-        print("tenant db Name:", security_context.tenant_db)
+        # Import DealConfig after Django is initialized
+        from config.deal_config import DealConfig
+
         db = security_context.get_tenant_db()
-        print("GET Tenant DB:", db.deals.count_documents({}))
-        try:
-            ...
-            # flags = security_context.details.get_flag('molecule_status', 'rtfm', {})
-            #print("Flags:", flags)
-        except AttributeError:
-            print("Flags: {}")
+        print(db)
+        print("GET Tenant DB:", db.deals.estimated_document_count())
+        print("DB name: ", db.name)
+        print("DB deals name: ", db.deals.name)
+        print("DB deals count: ", db.deals.find_one())
+        print("GET Tenant DB collections:", db.list_collection_names())
+        # Print the database and collection names: print(db.name, db.deals.name)
+        # Use db.deals.count_documents({}) for an accurate count.
+
+        deal_config = DealConfig()
+        print("Deal Config:", deal_config.config.get('update_new_collection'))
 
     except Exception as e:
         print(f"Error during initialization: {str(e)}")

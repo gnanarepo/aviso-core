@@ -1,5 +1,4 @@
 import hashlib
-from domainmodel import Model
 from utils import GnanaError
 from aviso.settings import sec_context, gnana_db2, gnana_db, sec_context
 
@@ -73,7 +72,7 @@ def csv_version_decorator(f):
 
     return new_func
 
-
+from domainmodel.model import Model
 class CSVData(Model):
     kind = 'domainmodel.csv_data.CSVData'
     version = 1.0
@@ -505,62 +504,6 @@ class CSVVersionData(CSVData):
             if len(ret_val) > 1:
                 raise GnanaError("TooManyMatchesFound")
         return ret_val
-
-    @classmethod
-    def truncate_or_drop(cls, criteria=None, drop=False):
-        if drop:
-            # truncate or drop the collection
-            ret = super(CSVData, cls).truncate_or_drop(criteria=criteria)
-            # clear the data belongs to the cleared table in the promotion table
-            table_name = (CSVPromotionData.getCollectionName()).replace('.', '$')
-            statement = """delete from "{table}" """.format(table=table_name)
-            statement += """where "csv_type"='{csv_type}' and "csv_name"='{csv_name}'
-                            """.format(csv_type=cls.csv_type, csv_name=cls.csv_name)
-            delete = True
-            if criteria:
-                delete = False
-                mnemonic = cls.get_mnemonic_from_criteria(criteria)
-                if mnemonic:
-                    if isinstance(mnemonic, str):
-                        statement += """ "quarter"='{quarter}' """.format(quarter=mnemonic)
-                        delete = True
-                    if isinstance(mnemonic, list):
-                        statement += """ "quarter" in ({quarters})""".format(
-                                        quarters=','.join(q for q in mnemonic))
-                        delete = True
-            if delete:
-                cls.queryExecutor(statement)
-            return ret
-
-        # call the csv upload process
-        kwargs = {'csv_name': cls.csv_name, 'csv_type': cls.csv_type, 'dd_type': 'complete', 'static_type': 'complete'}
-        return cls.truncate(criteria, **kwargs)
-
-    @classmethod
-    @csv_version_decorator
-    def truncate(cls, criteria, **kwargs):
-        if criteria is None:
-            criteria = {}
-        # prerequisite
-        # should be switched to a version and switched version should be unpromoted one
-        snapshot_info_from_context = sec_context.csv_version_info
-        if not snapshot_info_from_context.get('snapshot'):
-            raise GnanaError("Please Switch to an unpromoted version and try again..")
-        if snapshot_info_from_context.get('promoted'):
-            raise GnanaError("Please Use a version which is unpromoted")
-
-        # upload all the records into the version with mark as deleted
-        recs_to_reupload = []
-        for record in cls.getAll(criteria):
-            rec = {}
-            record.encode(rec)
-            rec.update(rec.pop('dynamic_fields', None))
-            # make record as marked_deleted true
-            rec.update({'marked_delete': True})
-            recs_to_reupload.append(rec)
-        from tasks import csv_tasks
-        ret = csv_tasks.csvdatauploadprocess(recs_to_reupload, **kwargs)
-        return ret['updates']
 
     @classmethod
     def renameCollection(cls, new_col_name, overwrite=False):

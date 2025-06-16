@@ -59,13 +59,6 @@ class PeriodsConfig(BaseConfig):
         return self.config.get('fm_period', 'Q')
 
     @cached_property
-    def period_hidden(self):
-        """
-        Fetches the quarter before which previous year and quarter needs to be hidden
-        """
-        return self.config.get('period_hidden', None)
-
-    @cached_property
     def yearly_fm(self):
         """
         True if yearly forecast management is enabled

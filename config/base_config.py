@@ -5,7 +5,7 @@ from copy import deepcopy
 # Reach out ot Waqas or Kuldeep for details.
 from aviso.settings import sec_context
 
-from infra import AUDIT_COLL
+from infra.constants import AUDIT_COLL
 from utils.date_utils import epoch
 
 # TODO: Do we still need to support the backup and email?

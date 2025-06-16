@@ -12,14 +12,13 @@ from aviso.settings import (CNAME, DEBUG, global_cache, gnana_db, gnana_db2,
                             local_db, sec_context)
 from django.http.response import HttpResponseNotFound
 
-from domainmodel import Model, ModelError
+from domainmodel.model import Model, ModelError
 from domainmodel.uip import (InboxEntry, InboxFileEntry, PartitionData,
                              UIPRecord)
 from utils import GnanaError, forwardmap, update_dict
 from utils.config_utils import config_pattern_expansion
 from utils.date_utils import datetime2epoch, get_a_date_time_as_float_some_how
 from utils.math_utils import excelToFloat
-from utils.string_utils import first15
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -139,14 +138,6 @@ class BasicFileType:
 
 class SnapShotFileType(BasicFileType):
 
-    def get_inbox_record(self, extid, record, ts):
-        for field_name in self.id_fields:
-            try:
-                record[field_name] = first15(record[field_name])
-            except KeyError:
-                pass
-        return {'extid': extid, 'when': ts, 'values': record}
-
     def apply_inbox_record(self, uip_record, inbox_record, fld_config={}):
         for name, value in inbox_record.values.items():
             uip_record.add_feature_value(
@@ -242,30 +233,7 @@ FileTypeTypes = {
     'snapshot': SnapShotFileType,
     'history': HistoryFileType,
     'usage': UsageFileType,
-    # 'tree': None,
 }
-
-
-# TODO: commenting this out because not used in hierarchy sync task
-# --- Model Support ---
-# model_types = {
-#     'forecast.Forecast': Forecast,
-#     'forecast2.Forecast2': Forecast2,
-#     'forecast3.Forecast3': Forecast3,
-#     'forecast4.Forecast4': Forecast4,
-#     'forecast5.Forecast5': Forecast5,
-#     'forecast.UnbornForecast': UnbornBaseModel,
-#     'forecast3.Unborn3': Unborn3,
-#     'forecast2.Forecast2_agg': Forecast2_agg,
-#     'forecast2.Forecast2_no_ds': Forecast2_no_ds,
-#     'forecast.FwdEPF': ForwardExistingPipeForecast,
-#     'forecast.FwdNPF': ForwardNewPipeForecast,
-#     'forecast.trajectoryforecast': TrajectoryForecast,
-#     'forecast.trajectoryforecast2': TrajectoryForecast2,
-#     'datatools.Counter': RecordCounter,
-#     'account.Churn': account_churn,
-#     'forecast2.EpfFromCsv': EpfFromCsv,
-# }
 
 class ModelDescription:
 
