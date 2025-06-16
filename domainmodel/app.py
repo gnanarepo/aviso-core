@@ -19,14 +19,8 @@ from aviso.settings import (POOL_PREFIX, WORKER_POOL, adhoc_task_validity,
                             taskactive_analyticengine_validity,
                             taskactive_validity, archive_task_validity)
 from celery import current_task
-from Crypto.Hash import SHA, SHA512
-from Crypto.PublicKey import RSA
-from Crypto.Signature import PKCS1_PSS
-
-from domainmodel import Model
+from domainmodel.model import Model
 from utils import date_utils
-from utils.common import ip_match
-from utils.string_utils import random_string
 
 logger = logging.getLogger('gnana.%s' % __name__)
 

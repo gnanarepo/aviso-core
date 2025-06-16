@@ -12,12 +12,8 @@ from bson.objectid import ObjectId
 from dateutil.rrule import WEEKLY, rrule
 
 from config.deal_config import DealConfig
-from infra import (DEALS_COLL, FAVS_COLL, GBM_CRR_COLL, NEW_DEALS_COLL,
-                   QUARTER_COLL)
-from infra.fetch_helper import modify_hint_field
-from infra.filters import contextualize_filter, parse_filters
-from infra.mongo_utils import \
-    _determine_period_field_name as get_key_for_close_periods
+from infra.filters import parse_filters
+
 from infra.constants import DEALS_COLL, NEW_DEALS_COLL
 from tasks.hierarchy.hierarchy_utils import get_user_permissions
 from utils.date_utils import (current_period, epoch, get_bom, get_boq, get_bow,

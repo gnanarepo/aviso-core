@@ -14,7 +14,7 @@ from utils.misc_utils import is_lead_service, try_index
 from utils.mongo_writer import (create_many_nodes, create_node, hide_node,
                                 label_node, move_node, unhide_node)
 
-logger = logging.getLogger('aviso-core.%s' % __name__)
+# logger = logging.getLogger('aviso-core.%s' % __name__)
 
 
 class HierSyncTask:
@@ -27,7 +27,7 @@ class HierSyncTask:
             result = sync_obj.return_value
             return {'success': True, 'result': result}
         except Exception as e:
-            logger.exception(e)
+            # logger.exception(e)
             return {'success': False,
                     'error_msg': e}
 
@@ -86,7 +86,7 @@ class _Sync:
         self.service = kwargs.get('service', None)
 
     def process(self):
-        logger.info('syncing hierarchy for for: %s', self.period)
+        # logger.info('syncing hierarchy for for: %s', self.period)
 
         self.curr_node_to_parent, self.curr_labels = fetch_node_to_parent_mapping_and_labels(self.timestamp,
                                                                                              include_hidden=False,
@@ -100,8 +100,9 @@ class _Sync:
         self.new_node_to_parent, self.new_labels = self.build_new_hierarchy()
 
         if self.config.debug:
-            logger.info(draw_tree(self.curr_node_to_parent, self.curr_labels))
-            logger.info(draw_tree(self.new_node_to_parent, self.new_labels))
+            pass
+            # logger.info(draw_tree(self.curr_node_to_parent, self.curr_labels))
+            # logger.info(draw_tree(self.new_node_to_parent, self.new_labels))
 
         curr_nodes = set(self.curr_node_to_parent)
         new_nodes = set(self.new_node_to_parent)
@@ -121,18 +122,18 @@ class _Sync:
 
     def persist(self):
         if not self.new_node_to_parent:
-            logger.warning('no hierarchy records persisted')
+            # logger.warning('no hierarchy records persisted')
             self.return_value = {'success': False, 'error': 'no hierarchy'}
             return
 
-        logger.info("""changing hierarchy for: %s,
-                       deleting: %s, sample delete: %s,
-                       creating: %s, sample create: %s,
-                       moving: %s, sample move: %s""",
-                    self.period,
-                    len(self.deleted_nodes), next(iter(self.deleted_nodes)) if self.deleted_nodes else None,
-                    len(self.created_nodes),  try_index(self.created_nodes.items(), 0),
-                    len(self.moved_nodes), try_index(self.moved_nodes.items(), 0),)
+        # logger.info("""changing hierarchy for: %s,
+        #                deleting: %s, sample delete: %s,
+        #                creating: %s, sample create: %s,
+        #                moving: %s, sample move: %s""",
+        #             self.period,
+        #             len(self.deleted_nodes), next(iter(self.deleted_nodes)) if self.deleted_nodes else None,
+        #             len(self.created_nodes),  try_index(self.created_nodes.items(), 0),
+        #             len(self.moved_nodes), try_index(self.moved_nodes.items(), 0),)
         # TODO: these need to have bulk ops
         for node in self.deleted_nodes:
             hide_node(node,
@@ -226,18 +227,18 @@ class _Bootstrap:
         self.labels = {}
 
     def process(self):
-        logger.info('bootstrapping hierarchy for for: %s', self.period)
+        # logger.info('bootstrapping hierarchy for for: %s', self.period)
 
         self.new_node_to_parent, self.labels = self.build_new_hierarchy()
 
     def persist(self):
-        logger.info('persisting %s hierarchy for: %s, sample node: %s',
-                    len(self.new_node_to_parent),
-                    self.period,
-                    try_index(self.new_node_to_parent.items(), 0))
+        # logger.info('persisting %s hierarchy for: %s, sample node: %s',
+        #             len(self.new_node_to_parent),
+        #             self.period,
+        #             try_index(self.new_node_to_parent.items(), 0))
         if not self.new_node_to_parent:
-            logger.warning('no hierarchy records persisted')
-            self.return_value = {'success': False, 'error': 'no hierarchy'}
+            # logger.warning('no hierarchy records persisted')
+            # self.return_value = {'success': False, 'error': 'no hierarchy'}
             return
 
         create_many_nodes(self.new_node_to_parent,

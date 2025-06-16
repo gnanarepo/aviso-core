@@ -52,6 +52,7 @@ def initialize_system():
     period = '2026Q1'
     user_name = 'waqas.ahmed'
     tenant_name = 'cisco_qa.com'
+    # tenant_name = 'cisco_qa_cache_preprod'
 
     # Create tenant with required methods
     class TenantDetails:

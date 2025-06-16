@@ -152,6 +152,10 @@ DEFAULT_DISPLAY_INSIGHTS_CARD = {
         "dlf_bad",
         "dlf_good",
 
+    ],
+    "in_fcst": ["dlf_change"],
+}
+
 # try:
 #     local_mongo_db = MongoClient(
 #         "mongodb://localhost:27017/", w=0, unicode_decode_error_handler = 'ignore')[os.environ.get('mongo-cache-db', 'local_cache')]
@@ -164,9 +168,6 @@ DEFAULT_DISPLAY_INSIGHTS_CARD = {
 cache_server = is_true(os.environ.get('CACHE_SERVER', False))
 event_context = event_holder
 sec_context = tenant_holder
-    ],
-    "in_fcst": ["dlf_change"],
-}
 DEFAULT_OPPMAP_JUDGE_TYPE_OPTION_LABELS = {
     "dlf": "DLF",
     "commit": "Commit",
@@ -4416,16 +4417,16 @@ class DealConfig(BaseConfig):
         return True, ""
 
     def _validate_filters(self, filters):
-        filter_ids = filters.values()
-        filter_results = fetch_many_filters(
-            [[filt_id] for filt_id in filter_ids], self, db=self.db
-        )
-        for filter_id in filter_ids:
-            name, filt = filter_results[tuple([filter_id])]
-            if not name:
-                return False, "filter id: {} not in filters collection".format(
-                    filter_id
-                )
+        # filter_ids = filters.values()
+        # filter_results = fetch_many_filters(
+        #     [[filt_id] for filt_id in filter_ids], self, db=self.db
+        # )
+        # for filter_id in filter_ids:
+        #     name, filt = filter_results[tuple([filter_id])]
+        #     if not name:
+        #         return False, "filter id: {} not in filters collection".format(
+        #             filter_id
+        #         )
         return True, ""
 
     def _validate_dashboard(self, dashboard):

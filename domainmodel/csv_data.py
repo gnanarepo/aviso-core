@@ -1,5 +1,4 @@
 import hashlib
-from domainmodel import Model
 from utils import GnanaError
 from aviso.settings import sec_context, gnana_db2, gnana_db, sec_context
 
@@ -73,7 +72,7 @@ def csv_version_decorator(f):
 
     return new_func
 
-
+from domainmodel.model import Model
 class CSVData(Model):
     kind = 'domainmodel.csv_data.CSVData'
     version = 1.0

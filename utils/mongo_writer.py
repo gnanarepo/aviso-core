@@ -4,7 +4,7 @@ from aviso.settings import sec_context
 from pymongo import InsertOne, ReturnDocument, UpdateOne
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 
-from infra import (AUDIT_COLL, DEALS_COLL, DRILLDOWN_COLL,
+from infra.constants import (AUDIT_COLL, DEALS_COLL, DRILLDOWN_COLL,
                    DRILLDOWN_LEADS_COLL, HIER_COLL, HIER_LEADS_COLL)
 from infra.read import (fetch_ancestors, fetch_boundry,
                         fetch_closest_boundaries, fetch_descendant_ids,

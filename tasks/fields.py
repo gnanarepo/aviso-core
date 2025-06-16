@@ -1,4 +1,3 @@
-from domainmodel import Model
 from utils.date_utils import EpochClass
 import logging
 from datetime import timedelta
