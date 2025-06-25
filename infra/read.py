@@ -1,5 +1,6 @@
 import copy
 import logging
+import re
 from collections import namedtuple
 from functools import wraps
 from itertools import product
@@ -1426,6 +1427,1502 @@ def fetch_users_nodes_and_root_nodes(user,
                         key=lambda x: x['level'])
 
     return user_nodes, [x for x in root_nodes if x['node'] in user_roots]
+
+def fetch_node_versioned(as_of,
+                        node,
+                        include_hidden=False,
+                        drilldown=True,
+                        fields=[],
+                        db=None,
+                        period=None,
+                        boundary_dates=None
+                        ):
+    """
+    fetch node record for single node
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+        node {str} -- node                                                      '0050000FLN2C9I2'
+
+    Keyword Arguments:
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        dict -- node record
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+    if boundary_dates:
+        from_date, to_date = boundary_dates
+    else:
+        if period:
+            as_of = get_period_as_of(period)
+            from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+            _, to_date = get_period_begin_end(period)
+        else:
+            from_date = to_date = as_of
+    criteria = {'node': node,
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    projection = {}
+    if fields:
+        for field in fields:
+            projection[field] = 1
+    else:
+        projection['_id'] = 0
+
+    return hier_collection.find(criteria, projection).next()
+
+
+def fetch_many_nodes_versioned(as_of,
+                            nodes,
+                            include_hidden=False,
+                            drilldown=True,
+                            db=None,
+                            period=None
+                            ):
+    """
+    fetch node records for many nodes
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+        nodes {list} -- list of nodes to find records for                        ['0050000FLN2C9I2', ]
+
+    Keyword Arguments:
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        generator -- generator of dicts of node records
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+        _, to_date = get_period_begin_end(period)
+    else:
+        from_date = to_date = as_of
+    criteria = {'$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if nodes:
+        criteria['node'] = {'$in': nodes}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    return hier_collection.find(criteria, {'_id': 0})
+
+
+def fetch_eligible_nodes_for_segment_versioned(as_of,
+                                            segment,
+                                            drilldown=True,
+                                            db=None,
+                                            period=None,
+                                            boundary_dates = None):
+    '''
+    fetches the nodes which are eligible for given segment
+
+    returns nodes which are eligible
+    '''
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+    hier_collection.ensure_index([('normal_segs', -1), ('from', -1), ('to', -1)])
+
+    if boundary_dates:
+        from_date, to_date = boundary_dates
+    else:
+        if period:
+            as_of = get_period_as_of(period)
+            from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+            _, to_date = get_period_begin_end(period)
+        else:
+            from_date = to_date = as_of
+
+    criteria = {'normal_segs': {'$in': [segment]},
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+
+    return hier_collection.find(criteria, {'_id':0, 'node': 1})
+
+def fetch_hidden_nodes_versioned(as_of,
+                                 drilldown=True,
+                                 signature='',
+                                 db=None,
+                                 period=None,
+                                 service=None):
+    """
+    fetch nodes that are hidden
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+
+    Keyword Arguments:
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        signature {str} -- if provided, fetch only hidden nodes with how
+                           matching signature, (default: {''})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        list -- list of dicts of node records
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    if is_lead_service(service):
+        coll = HIER_LEADS_COLL if not drilldown else DRILLDOWN_LEADS_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, to_date = fetch_boundry(as_of, drilldown=drilldown, service=service)
+    else:
+        from_date = to_date = as_of
+
+    if 'Q' in period:
+        prev_prd = prev_period(period_type='Q')[0]
+        prev_as_of = get_period_as_of(prev_prd)
+        prev_timestamp, prev_end_timestamp = fetch_boundry(prev_as_of, drilldown=drilldown, service=service)
+    else:
+        prev_prd = str(int(period[:4]) - 1) + str(int(period[4:]) + 11) if int(period[4:]) - 1 == 0 else str(int(period) - 1)
+        prev_as_of = get_period_as_of(prev_prd)
+        prev_timestamp, prev_end_timestamp = fetch_boundry(prev_as_of, drilldown=drilldown, service=service)
+
+    how_criteria = {'$or': [{'how': {'$regex': '_hide'}},
+                            {'how': {'$regex': '^hide', '$options': 'm'}}]}
+
+    previous_period_hidden_criteria = {'from': {'$lt': from_date}}
+
+    previous_period_hidden_criteria.update(how_criteria)
+
+    #logger.info("previous_period_hidden_criteria: %s",previous_period_hidden_criteria)
+
+    current_period_nodes_criteria = {'from': {'$gte': prev_timestamp}}
+
+    if to_date is None:
+        current_period_nodes_criteria['$or'] = [{"to": None},
+                                                {"to": {'$lte': prev_end_timestamp}}]
+    else:
+        current_period_nodes_criteria['to'] = {'$lte':to_date}
+
+    current_period_hidden_criteria= copy.deepcopy(current_period_nodes_criteria)
+    current_period_hidden_criteria.update(how_criteria)
+
+    #logger.info("current_period_hidden_criteria: %s", current_period_hidden_criteria)
+
+    hidden_nodes = {}
+
+    previous_period_hidden_nodes = hier_collection.find(previous_period_hidden_criteria, {'_id': 0})
+    current_period_hidden_nodes = hier_collection.find(current_period_hidden_criteria, {'_id': 0})
+    current_period_nodes = hier_collection.find(current_period_nodes_criteria, {'_id': 0})
+
+    for node in previous_period_hidden_nodes:
+        hidden_nodes[node['node']] = node
+
+    for node in current_period_hidden_nodes:
+        hidden_nodes[node['node']] = node
+
+    for node in current_period_nodes:
+        if "_hide" in node['how'] or node['how'].startswith('hide'):
+            continue
+
+        if node['node'] in hidden_nodes and node['from'] > hidden_nodes[node['node']]['from']:
+            del hidden_nodes[node['node']]
+
+    #logger.info("%s hidden nodes found",len(hidden_nodes))
+
+    return hidden_nodes.values()
+
+def fetch_root_nodes_versioned(as_of,
+                               include_hidden=False,
+                               drilldown=True,
+                               true_roots=False,
+                               db=None,
+                               period=None,
+                               service=None
+                               ):
+    """
+    fetch node records for root nodes
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+
+    Keyword Arguments:
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        true_roots {bool} -- if True, fetch the true admin root nodes
+                             otherwise fetch the visible root node in app
+                             (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        list -- list of dicts of node records
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    if is_lead_service(service):
+        coll = HIER_LEADS_COLL if not drilldown else DRILLDOWN_LEADS_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+        _, to_date = get_period_begin_end(period)
+    else:
+        from_date = to_date = as_of
+
+    criteria = {'parent': None,
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+    pipeline = [{'$match': criteria},
+                {'$project': {'_id':0}}]
+
+    roots = hier_collection.aggregate(pipeline)
+    if true_roots or not drilldown:
+        return roots
+
+    # TODO: ok 1, this is dumb and can probably do done in a single query
+    # but also 2, is this safe and does it make sense?
+    criteria = {'parent': {'$in': [x['node'] for x in roots]},
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    pipeline = [{'$match': criteria},
+                {'$project': {'_id':0, 'from':0, 'to':0}}]
+
+    return [node for node in hier_collection.aggregate(pipeline) if 'not_in_hier' not in node['node']]
+
+def fetch_ancestors_versioned(as_of,
+                              nodes=None,
+                              include_hidden=False,
+                              include_children=False,
+                              drilldown=True,
+                              limit_to_visible=False,
+                              db=None,
+                              period=None,
+                              boundary_dates=None,
+                              service=None,
+                              unattached=False,
+                              is_edw_write=False
+                              ):
+    """
+    fetch ancestors of many hierarchy nodes
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+
+    Keyword Arguments:
+        nodes {list} -- nodes to find ancestors for, if None grabs all          ['0050000FLN2C9I2', ]
+                        (default: {None})
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        include_children {bool} -- if True, fetch children of nodes in nodes
+                            (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        limit_to_visible {bool} if True, only return ancestors up to visible root if not admin user
+                                if admin user, return ancestors up to admin root
+                                if False, return all ancestors regardless of visibility
+                                (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        generator -- generator of ({node: node, parent: parent, ancestors: [ancestors from root to bottom]})
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    if is_lead_service(service):
+        coll = HIER_LEADS_COLL if not drilldown else DRILLDOWN_LEADS_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if boundary_dates:
+        from_date, to_date = boundary_dates
+    else:
+        if period:
+            as_of = get_period_as_of(period)
+            from_date, _ = fetch_boundry(as_of, drilldown=drilldown, service=service)
+            _, to_date = get_period_begin_end(period)
+        else:
+            from_date = to_date = as_of
+
+    if limit_to_visible and is_edw_write == False:
+        user_access = get_user_permissions(sec_context.get_effective_user(), 'results')
+        exclude_admin_root = '!' not in user_access
+    else:
+        exclude_admin_root = False
+
+    criteria = {'$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    if nodes:
+        node_criteria = {'node': {'$in': list(nodes)}}
+        if include_children:
+            node_criteria = {'$or': [node_criteria, {'parent': {'$in': list(nodes)}}]}
+        match = merge_dicts(criteria, node_criteria)
+    else:
+        match = criteria
+
+    anc_criteria = copy.deepcopy(criteria)
+    if unattached:
+        anc_criteria.update({
+            'unattached': True
+        })
+    lookup = {'from': coll,
+              'startWith': '$parent',
+              'connectFromField': 'parent',
+              'connectToField': 'node',
+              'depthField': 'level',
+              'restrictSearchWithMatch': anc_criteria,
+              'as': 'ancestors'}
+    project = {'node': 1,
+               'parent': 1,
+               'label': 1,
+               '_id': 0,
+               'ancestors': {'$map': {'input': '$ancestors',
+                                      'as': 'ancestor',
+                                      'in': {'node': '$$ancestor.node',
+                                             'level': '$$ancestor.level'}}}}
+
+    group = {'_id':
+                {'node': '$node',
+                'parent': '$parent',
+                'label': '$label',
+                'how': '$how'},
+            'node':{'$last':'$node'},
+            'parent':{'$last':'$parent'},
+            'label':{'$last':'$label'},
+            'how':{'$last':'$how'}}
+
+    pipeline = [{'$match': match},
+                {'$group': group},
+                {'$graphLookup': lookup},
+                {'$project': project}]
+
+    return _anc_yielder_versioned(hier_collection.aggregate(pipeline), exclude_admin_root)
+
+
+def fetch_descendants_versioned(as_of,
+                                nodes=None,
+                                levels=1,
+                                include_hidden=False,
+                                include_children=False,
+                                drilldown=True,
+                                db=None,
+                                period=None,
+                                boundary_dates=None,
+                                leads=False,
+                                ):
+    """
+    fetch descendants of many hierarchy nodes
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+        nodes {list} -- nodes to find descendants for                           ['0050000FLN2C9I2', ]
+
+    Keyword Arguments:
+        nodes {list} -- nodes to find ancestors for, if None grabs all
+                    (default: {None})
+        levels {int} -- how many levels of tree to traverse down
+                        (default: {1})
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        include_children {bool} -- if True, fetch children of nodes in nodes
+                                   (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        generator -- generator of ({node: node, parent: parent, descendants: ({children}, {grandchildren}, ... ,)})
+    """
+    if leads: coll = HIER_LEADS_COLL if not drilldown else DRILLDOWN_LEADS_COLL
+    else: coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if boundary_dates:
+        from_date, to_date = boundary_dates
+    else:
+        if period:
+            as_of = get_period_as_of(period)
+            from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+            _, to_date = get_period_begin_end(period)
+        else:
+            from_date = to_date = as_of
+
+
+    criteria = {'$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    if nodes:
+        node_criteria = {'node': {'$in': list(nodes)}}
+        if include_children:
+            node_criteria = {'$or': [node_criteria, {'parent': {'$in': list(nodes)}}]}
+        match = merge_dicts(criteria, node_criteria)
+    else:
+        match = criteria
+
+    lookup = {'from': coll,
+              'startWith': '$node',
+              'connectFromField': 'node',
+              'connectToField': 'parent',
+              'depthField': 'level',
+              'restrictSearchWithMatch': criteria,
+              'maxDepth': levels - 1,
+              'as': 'descendants'}
+    project = {'node': 1,
+               'parent': 1,
+               'label': 1,
+               '_id': 0,
+               'descendants': {'$map': {'input': '$descendants',
+                                        'as': 'descendant',
+                                        'in': {'node': '$$descendant.node',
+                                               'parent': '$$descendant.parent',
+                                               'level': '$$descendant.level'}}}}
+    pipeline = [{'$match': match},
+                {'$graphLookup': lookup},
+                {'$project': project},
+                ]
+
+    return _desc_yielder(hier_collection.aggregate(pipeline), levels)
+
+
+def fetch_users_nodes_and_root_nodes_versioned(user,
+                                               as_of,
+                                               include_hidden=False,
+                                               drilldown=True,
+                                               db=None,
+                                               period=None,
+                                               service=None
+                                               ):
+    """
+    fetch the top level nodes that a user has access to, and the hierarchy roots of those nodes
+
+    Arguments:
+        user {dict} -- user object from sec_context                             ??
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+
+    Keyword Arguments:
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        tuple -- ([users top level node dicts], [users root dicts])
+    """
+    if service == 'leads':
+        user_access = get_user_permissions(user, 'leads_results')
+    else:
+        user_access = get_user_permissions(user, 'results')
+    logger.info("User Access is data for nodes:" + str(user_access))
+
+    # admin access, users nodes are the admin level roots, usually invisible in app
+    if '!' in user_access:
+        root_nodes = [merge_dicts(node, {'root': node['node']})
+                      for node in
+                      fetch_root_nodes(as_of, include_hidden, drilldown, true_roots=True, db=db, period=period,
+                                       service=service)]
+        return root_nodes, root_nodes
+
+    root_nodes = [merge_dicts(node, {'root': node['node']})
+                  for node in fetch_root_nodes(as_of, include_hidden, drilldown, true_roots=False, db=db, period=period,
+                                               service=service)]
+    # global access, users nodes are the hierarchies roots
+    if '*' in user_access:
+        if not is_lead_service(service):
+            return root_nodes, root_nodes
+        user_access.remove('*')
+
+    user_nodes, nodes, user_roots = [], set(), set()
+    for node in fetch_ancestors(as_of, user_access, include_hidden, drilldown=drilldown, limit_to_visible=True, db=db,
+                                period=period, service=service):
+        try:
+            node['root'] = node['ancestors'][0]
+        except IndexError:
+            node['root'] = node['node']
+        node['level'] = len(node['ancestors'])
+
+        user_nodes.append(node)
+        nodes.add(node['node'])
+        user_roots.add(node['root'])
+
+    user_nodes = sorted((node for node in user_nodes if not any(ancestor in nodes for ancestor in node['ancestors'])),
+                        key=lambda x: x['level'])
+
+    return user_nodes, [x for x in root_nodes if x['node'] in user_roots]
+
+
+def search_nodes_versioned(as_of,
+                        search_terms,
+                        include_hidden=False,
+                        drilldown=True,
+                        db=None,
+                        period=None):
+    """
+    search for nodes fuzzy matching search terms
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+        search_terms {list} -- list of terms to search for, OR not AND          ['alex', 'megan']
+
+    Keyword Arguments:
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        generator -- generator of dicts of node records
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+        _, to_date = get_period_begin_end(period)
+    else:
+        from_date = to_date = as_of
+
+    criteria = {'$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    # TODO: this match could be looser, not super kind to typos
+    criteria['$or'] = [{field: {'$regex': '|'.join(search_terms), '$options': 'i'}} for field in ['label', 'node']]
+
+    return hier_collection.find(criteria, {'node': 1, 'label': 1, '_id': 0})
+
+def fetch_descendant_ids_versioned(as_of,
+                                   node,
+                                   levels=None,
+                                   include_hidden=False,
+                                   drilldown=True,
+                                   db=None,
+                                   period=None, service=None):
+    """
+    fetch unordered list of node ids of descendants of node
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+        node {str} -- node                                                      '0050000FLN2C9I2'
+
+    Keyword Arguments:
+        levels {int} -- how many levels of tree to traverse down
+                        if None, traverses entire tree (default: {None})
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        list -- [node ids]
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    if is_lead_service(service):
+        coll = HIER_LEADS_COLL if not drilldown else DRILLDOWN_LEADS_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, _ = fetch_boundry(as_of, drilldown=drilldown, service=service)
+        _, to_date = get_period_begin_end(period)
+    else:
+        from_date = to_date = as_of
+
+    criteria = {'$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    if node:
+        match = merge_dicts(criteria, {'node': node})
+    else:
+        roots = [x['node'] for x in fetch_root_nodes(as_of, drilldown=drilldown, period=period, service=service)]
+        match = merge_dicts(criteria, {'node': {'$in': roots}})
+
+    lookup = {'from': coll,
+              'startWith': '$node',
+              'connectFromField': 'node',
+              'connectToField': 'parent',
+              'depthField': 'level',
+              'restrictSearchWithMatch': criteria,
+              'as': 'descendants'}
+    if levels:
+        lookup['maxDepth'] = levels - 1
+
+    project = {'_id': 0,
+               'descendants': '$descendants.node'}
+    pipeline = [{'$match': match},
+                {'$graphLookup': lookup},
+                {'$project': project},
+                ]
+
+    try:
+        return hier_collection.aggregate(pipeline).next()['descendants']
+    except StopIteration:
+        return []
+
+def fetch_ancestor_ids_versioned(as_of,
+                                nodes=None,
+                                include_hidden=False,
+                                hidden_only=False,
+                                drilldown=True,
+                                signature='',
+                                db=None,
+                                period=None,
+                                service=None):
+    """
+    fetch set of node ids of ancestors of nodes
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+
+    Keyword Arguments:
+        nodes {list} -- nodes                                                   ['0050000FLN2C9I2']
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        hidden_only {bool} -- if True, include only hidden nodes and their ancestors
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        signature {str} -- if provided, fetch only hidden nodes with how
+                           matching signature, (default: {''})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        set -- {node ids}
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    if is_lead_service(service):
+        coll = HIER_LEADS_COLL if not drilldown else DRILLDOWN_LEADS_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, _ = fetch_boundry(as_of, drilldown=drilldown, service=service)
+        _, to_date = get_period_begin_end(period)
+    else:
+        from_date = to_date = as_of
+
+    criteria = {'$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    if nodes:
+        node_criteria = {'node': {'$in': list(nodes)}}
+        match = merge_dicts(criteria, node_criteria)
+    else:
+        match = {k: v for k, v in criteria.iteritems()}
+
+    if signature:
+        match['how'] = signature
+
+    if hidden_only:
+        hidden_only_criteria = {'$or': [
+                {'$and': [{'hidden_from': {'$lte': from_date}},
+                          {"$or": [{"hidden_to": {"$exists": False}}, {"hidden_to": None},
+                                   {'hidden_to': {'$gte': to_date}}
+                                   ]},
+                          ]
+                 }]
+            }
+        match = {'$and': [criteria, hidden_only_criteria]}
+
+    lookup = {'from': coll,
+              'startWith': '$parent',
+              'connectFromField': 'parent',
+              'connectToField': 'node',
+              'depthField': 'level',
+              'restrictSearchWithMatch': criteria,
+              'as': 'ancestors'}
+    project = {'_id': 0,
+               'ancestors': '$ancestors.node',
+               'node': 1}
+
+    pipeline = [{'$match': match},
+                {'$graphLookup': lookup},
+                {'$project': project}]
+
+    ids = set()
+    for rec in hier_collection.aggregate(pipeline):
+        ids.add(rec['node'])
+        ids |= set(rec['ancestors'])
+    return ids
+
+
+def fetch_labels_versioned(as_of,
+                           nodes,
+                           include_hidden=False,
+                           drilldown=True,
+                           db=None,
+                           period=None,
+                           boundary_dates=None,
+                           service=None
+                           ):
+    """
+    fetch labels of nodes
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+        node {list} -- list of nodes to find names for                          ['0050000FLN2C9I2', ]
+
+    Keyword Arguments:
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        dict -- mapping from node to label
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    if is_lead_service(service):
+        coll = HIER_LEADS_COLL if not drilldown else DRILLDOWN_LEADS_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if boundary_dates:
+        from_date, to_date = boundary_dates
+    else:
+        if period:
+            as_of = get_period_as_of(period)
+            from_date, _ = fetch_boundry(as_of, drilldown=drilldown, service=service)
+            _, to_date = get_period_begin_end(period)
+        else:
+            from_date = to_date = as_of
+
+    criteria = {'node': {'$in': nodes},
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    return {node['node']: node['label'] for node in hier_collection.aggregate([{'$match':criteria}, {'$project':{'node': 1, 'label': 1, '_id': 0}}])}
+
+
+def node_is_valid_versioned(node,
+                            period,
+                            drilldown=True,
+                            db=None,
+                            ):
+    """
+    check if a node is a real live node
+
+    Arguments:
+        node {str} -- node                                                      '0050000FLN2C9I2'
+        period {str} -- period mnemonic                                         '2020Q2'
+
+    Keyword Arguments:
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        bool -- True if valid
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    as_of = get_period_as_of(period)
+    from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+    _, to_date = get_period_begin_end(period)
+
+    criteria = {'node': node,
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    hide_criteria = {'$or': [
+            {"$and": [
+                {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+            ]
+            },  # Checking for the node which is not marked as hidden earlier
+            {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+        ]
+        }
+    criteria = {'$and': [criteria, hide_criteria]}
+
+    try:
+        hier_collection.find(criteria, {'_id': 0}).next()
+        return True
+    except StopIteration:
+        return False
+
+def node_exists_versioned(node,
+                        period,
+                        drilldown=True,
+                        db=None,
+                        ):
+    """
+    check if a node exists in the hierarchy, dead or alive
+
+    Arguments:
+        node {str} -- node                                                      '0050000FLN2C9I2'
+        period {str} -- period mnemonic                                         '2020Q2'
+
+    Keyword Arguments:
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        bool -- True if exists
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+    as_of = get_period_as_of(period)
+    from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+    _, to_date = get_period_begin_end(period)
+
+    criteria = {'node': node,
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    try:
+        hier_collection.find(criteria, {'_id': 0}).next()
+        return True
+    except StopIteration:
+        return False
+
+
+def fetch_top_level_nodes_versioned(as_of,
+                                    levels=1,
+                                    include_hidden=False,
+                                    include_children=False,
+                                    drilldown=True,
+                                    db=None,
+                                    period=None
+                                    ):
+    """
+    fetch descendants of many hierarchy nodes
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+        nodes {list} -- nodes to find descendants for                           ['0050000FLN2C9I2', ]
+
+    Keyword Arguments:
+        levels {int} -- how many levels of tree to traverse down
+                        (default: {1})
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        include_children {bool} -- if True, fetch children of nodes in nodes
+                                   (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        generator -- (nodes)
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+        _, to_date = get_period_begin_end(period)
+    else:
+        from_date = to_date = as_of
+
+    criteria = {'$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    match = merge_dicts(criteria, {'parent': None})
+
+    lookup = {'from': coll,
+              'startWith': '$node',
+              'connectFromField': 'node',
+              'connectToField': 'parent',
+              'restrictSearchWithMatch': criteria,
+              'maxDepth': levels - 1,
+              'as': 'descendants'}
+    project = {'node': 1,
+               '_id': 0,
+               'descendants': '$descendants.node'}
+    pipeline = [{'$match': match},
+                {'$graphLookup': lookup},
+                {'$project': project},
+                ]
+    for node_rec in hier_collection.aggregate(pipeline):
+        yield node_rec['node']
+        for node in node_rec['descendants']:
+            yield node
+
+def fetch_owner_id_nodes_versioned(as_of,
+                                include_hidden=False,
+                                drilldown=True,
+                                db=None,
+                                period=None):
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+        _, to_date = get_period_begin_end(period)
+    else:
+        from_date = to_date = as_of
+
+
+    # TODO: only safe for salesforce right now...
+    pattern = re.compile("^005") if not drilldown else re.compile("(?<=#)005", re.MULTILINE)
+    criteria = {'node': {'$regex': pattern},
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    return hier_collection.find(criteria, {'node': 1, '_id': 0, 'label': 1})
+
+def fetch_non_owner_id_nodes_versioned(as_of,
+                                    include_hidden=False,
+                                    drilldown=True,
+                                    db=None,
+                                    period=None):
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if period:
+        as_of = get_period_as_of(period)
+        from_date, _ = fetch_boundry(as_of, drilldown=drilldown)
+        _, to_date = get_period_begin_end(period)
+    else:
+        from_date = to_date = as_of
+
+    # TODO: only safe for salesforce right now...
+    pattern = re.compile("^(?!005).*", re.MULTILINE) if not drilldown else re.compile("#(?!005)(?:.(?!#))+$", re.MULTILINE)
+    criteria = {'node': {'$regex': pattern},
+                '$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$or': [
+                {"$and": [
+                    {"$or": [{'hidden_from': {"$exists": False}}, {'hidden_from': None}]},
+                    {"$or": [{'hidden_to': {"$exists": False}}, {'hidden_to': None}]}
+                ]
+                },  # Checking for the node which is not marked as hidden earlier
+                {'hidden_to': {'$lte': to_date}}  # Already Node has been unblocked from hidden state
+            ]
+            }
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    return hier_collection.find(criteria, {'node': 1, '_id': 0, 'label': 1})
+
+class AccessError(Exception):
+    pass
+
+
+class NodeDoesntExistError(Exception):
+    pass
+
+
+def validate_node_for_user_versioned(user,
+                                    as_of,
+                                    node=None,
+                                    drilldown=True,
+                                    db=None,
+                                    period=None
+                                    ):
+    user_nodes = get_user_permissions(user, 'results')
+    if not node:
+        if '*' in user_nodes:
+            return True
+        raise AccessError()
+
+    try:
+        ancestors = fetch_ancestors(as_of, [node], drilldown=drilldown, db=db, period=period).next()['ancestors']
+        if '*' in user_nodes or node in user_nodes:
+            return True
+        if any(user_node in ancestors for user_node in user_nodes):
+            return True
+    except StopIteration:
+        # given a totally bogus node
+        raise NodeDoesntExistError()
+
+    raise AccessError()
+
+def _anc_yielder_versioned(nodes, exclude_admin_root=False):
+    if not nodes.alive:
+        yield {}
+    for node in nodes:
+        unique_ancestor_nodes = []
+        for ancestor in node['ancestors']:
+            if ancestor not in unique_ancestor_nodes:
+                unique_ancestor_nodes.append(ancestor)
+        node['ancestors'] = unique_ancestor_nodes
+        if not exclude_admin_root:
+            node['ancestors'] = [x['node'] for x in sorted(node['ancestors'], key=lambda x: x.get('level'), reverse=True)]
+        else:
+            node['ancestors'] = [x['node'] for x in sorted(node['ancestors'], key=lambda x: x.get('level'), reverse=True)][1:]
+        yield node
+
+
+def fetch_node_to_parent_mapping_and_labels_versioned(as_of,
+                                                      include_hidden=False,
+                                                      drilldown=True,
+                                                      db=None,
+                                                      action=None,
+                                                      period=None,
+                                                      boundary_dates=None,
+                                                      service=None
+                                                      ):
+    """
+    fetch map of node : parent for all nodes in hierarchy
+
+    Arguments:
+        as_of {int} -- epoch timestamp to fetch data as of                      1556074024910
+
+    Keyword Arguments:
+        include_hidden {bool} -- if True, include hidden nodes
+                                 (default: {False})
+        drilldown {bool} -- if True, fetch drilldown node instead of hierarchy
+                            (default: {False})
+        db {object} -- instance of tenant_db (default: {None})
+                       if None, will create one
+
+    Returns:
+        tuple -- ({node: parent}, {node: label})
+    """
+    coll = HIER_COLL if not drilldown else DRILLDOWN_COLL
+    if is_lead_service(service):
+        coll = HIER_LEADS_COLL if not drilldown else DRILLDOWN_LEADS_COLL
+    hier_collection = db[coll] if db else sec_context.tenant_db[coll]
+
+    if boundary_dates:
+        from_date, to_date = boundary_dates
+    else:
+        if period:
+            as_of = get_period_as_of(period)
+            from_date, _ = fetch_boundry(as_of, drilldown=drilldown, service=service)
+            _, to_date = get_period_begin_end(period)
+        else:
+            from_date = to_date = as_of
+
+    criteria = {'$and': [
+                    {"$or": [
+                        {"$and": [
+                            {'from': {'$lte': from_date}},
+                            {'$or': [
+                                {'to': None},
+                                {'to': {'$gte': to_date}}
+                                ]
+                            }]
+                        },
+                        {"$and": [
+                            {'from': {'$gt': from_date}},
+                            {'to': {'$lte': to_date}}
+                            ]
+                        }
+                    ]}
+                ]}
+    if not include_hidden:
+        hide_criteria = {'$nor':[{'how': {'$regex':'_hide'}},
+                                {'how': {'$regex':'^hide','$options':'m'}}]}
+        criteria = {'$and': [criteria, hide_criteria]}
+
+    hier_records = hier_collection.find(criteria, {'node': 1, 'parent': 1, 'label': 1, '_id': 0, 'is_team':1})
+
+    node_to_parent, labels = {}, {}
+    if action:
+        for hier_record in hier_records:
+            node_to_parent[hier_record['node']] = {"parent": hier_record['parent'], "is_team": hier_record.get("is_team", False)}
+            labels[hier_record['node']] = hier_record['label']
+    else:
+        for hier_record in hier_records:
+            node_to_parent[hier_record['node']] = hier_record['parent']
+            labels[hier_record['node']] = hier_record['label']
+
+    return node_to_parent, labels
+
+
 
 # This function is for a non-versioned tenant
 # TODO: Any changes to this function should be made in versioned function as well if required
