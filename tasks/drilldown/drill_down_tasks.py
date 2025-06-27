@@ -4,7 +4,7 @@ from urllib.parse import quote
 from aviso.settings import sec_context
 
 from deal_service.tasks import DealsTask
-from infra import DEALS_COLL, NEW_DEALS_COLL
+from infra.constants import DEALS_COLL, NEW_DEALS_COLL
 from infra.write import _remove_run_full_mode_flag
 from tasks.hierarchy.hier_sync_tasks import Sync
 from tasks.sync_drilldown import SyncDrilldown
