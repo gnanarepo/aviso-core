@@ -7,26 +7,43 @@ from json import loads
 import collections
 import logging
 from copy import deepcopy
+from pymongo import MongoClient
+
+from data_load.tenants import ms_connection_strings
 from domainmodel.datameta import Dataset
 from utils.date_utils import epoch, current_period
+from utils.misc_utils import prune_pfx
 from utils.result_utils import generate_subscription_same_dd_recs, generate_appannie_dummy_recs, \
     generate_subscription_recs, generate_expiration_date_renewal_rec, generate_expiration_date_renewal_rec_github, \
     generate_revenue_recs
+from utils.data_load_utils import get_drilldowns, get_dd_list
+
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
 
 class DataLoad:
-    def __init__(self, id_list, from_timestamp=0):
+    def __init__(self, id_list, tenant_name, stack, gbm_stack, pod, etl_stack, from_timestamp=0, changed_fields_only=False):
         self.id_list = id_list
         self.from_timestamp = from_timestamp
+        self.tenant_name = tenant_name
+        self.stack = stack
+        self.gbm_stack = gbm_stack
+        self.pod = pod
+        self.etl_stack = etl_stack
+        self.changed_fields_only = changed_fields_only
 
     def get_basic_results(self):
         ds = Dataset.getByNameAndStage('OppDS', None)
         use_core_show = ds.models['common'].config.get('fastlane_config', {}).get('use_core_show')
+        viewgen_config = ds.models['common'].config.get('viewgen_config', {})
+        uipfield = ds.params['general']['uipfield']
         record_filter = ds.get_model_filter('bookings_rtfm')
-
-        db = sec_context.tenant_db
+        drilldowns = get_drilldowns(self.tenant_name, self.stack, viewgen_config)
+        ms_connection_string = ms_connection_strings(self.pod)
+        print('Connecting to MongoDB for {} {}'.format(self.tenant_name, self.pod))
+        client = MongoClient(ms_connection_string)
+        db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
         # Get Current Period
         coll = db[sec_context.name + '.Period._uip._data']
@@ -59,6 +76,7 @@ class DataLoad:
         print('Fetched data from OppDS collection in MongoDB for {}'.format(sec_context.name))
 
         final_deals = []
+        from_timestamp_xl = (self.from_timestamp / 1000.0) / 86400 + 25569
         for deal in deals:
             if use_core_show:
                 allow_deal = DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
@@ -69,10 +87,35 @@ class DataLoad:
                                                                                                     'values'],
                                                                                                 record_filter)
             if allow_deal:
-                final_deals.append(deal)
+                temp = {'extid': deal['object']['extid']}
+                values = deal['object']['values']
+                if self.from_timestamp and self.changed_fields_only:
+                    history = deal['object']['history']
+                    for fld in uipfield:
+                        value = history.get(prune_pfx(fld), [[0.0, 'N/A']])
+                        if value[-1][0] > from_timestamp_xl:
+                            temp[fld] = value[-1][1]
+                else:
+                    for fld in uipfield:
+                        value = values.get(prune_pfx(fld), 'N/A')
+                        try:
+                            temp[fld] = loads(value)
+                        except:
+                            temp[fld] = value
+                print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+                drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
+                print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+                temp['__segs'] = drilldown_list
+                if split_fields:
+                    for fld, val in split_fields.items():
+                        if self.from_timestamp and self.changed_fields_only:
+                            if fld in temp:
+                                temp[fld] = val
+                        else:
+                            temp[fld] = val
+                final_deals.append(temp)
             else:
-                print(
-                    'Skipping deal {} for {} due to record filter'.format(deal['object']['extid'], sec_context.name))
+                print('Skipping deal {} for {} due to record filter'.format(deal['object']['extid'], sec_context.name))
 
         return final_deals
 
@@ -80,7 +123,6 @@ class DataLoad:
     def passes_record_filter(opp_id, data, record_filter):
         if not record_filter:
             return True
-        from json import loads
         import re
         for filter_expr, values in record_filter.items():
             if filter_expr[-1:] != ')':
