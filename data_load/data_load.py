@@ -1,178 +1,187 @@
+from datetime import datetime
+import pytz
+from aviso.settings import sec_context
+from dateutil.tz import gettz
+
+from json import loads
 import collections
-import json
 import logging
 from copy import deepcopy
-
-from aviso.settings import sec_context
-from aviso.utils.dateUtils import TimeHorizon
-from django.http import HttpResponseBadRequest
-
 from domainmodel.datameta import Dataset
 from utils.date_utils import epoch, current_period
-from utils.misc_utils import prune_pfx
 from utils.result_utils import generate_subscription_same_dd_recs, generate_appannie_dummy_recs, \
     generate_subscription_recs, generate_expiration_date_renewal_rec, generate_expiration_date_renewal_rec_github, \
     generate_revenue_recs
-from .viewgen_service import CoolerViewGeneratorService
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
 
 class DataLoad:
-    def __init__(self, period, id_list, from_timestamp=0):
-        self.period = period
+    def __init__(self, id_list, from_timestamp=0):
         self.id_list = id_list
         self.from_timestamp = from_timestamp
 
-    def fetch_records(self):
-        # In case of hier only drilldowns, this method constructs various fields like amount, ratios etc.
-
-        if (not self.period or not self.from_timestamp) and not self.id_list:
-            return HttpResponseBadRequest('Need to provide period and from_timestamp arguments or id_list')
-
+    def get_basic_results(self):
         ds = Dataset.getByNameAndStage('OppDS', None)
-        uips = ds.params['general']['uipfield']
         use_core_show = ds.models['common'].config.get('fastlane_config', {}).get('use_core_show')
-        dt = epoch().as_datetime()
-        gen = CoolerViewGeneratorService(perspective=None, hier_asof=dt)
+        record_filter = ds.get_model_filter('bookings_rtfm')
 
-        th = TimeHorizon()
-        self.model_inst = ds.get_model_instance('bookings_rtfm', th, [])
+        db = sec_context.tenant_db
 
+        # Get Current Period
+        coll = db[sec_context.name + '.Period._uip._data']
+        records = list(coll.find({}, {'_id': 0}))
+        print('Fetched data from Period collection in MongoDB for {}'.format(sec_context.name))
+        timezone = 'US/Pacific'  # default timezone
+        for record in records:
+            if bool(record['object']['values'].get('TimeZoneSidKey')):
+                timezone = loads(record['object']['values']['TimeZoneSidKey'])
+                break
+        current_date = datetime.now().astimezone(pytz.timezone(timezone)).strftime('%Y%m%d')
+
+        for record in records:
+            if bool(record['object']['values'].get('Type')):
+                if loads(record['object']['values'].get('Type')).lower() == 'quarter':
+                    start_date = loads(record['object']['values']['StartDate'])
+                    end_date = loads(record['object']['values']['EndDate'])
+                    if start_date <= current_date <= end_date:
+                        boq = datetime.strptime(start_date, '%Y%m%d').replace(
+                            tzinfo=gettz(timezone)).timestamp() / 86400 + 25569
+                        eoq = datetime.strptime(end_date, '%Y%m%d').replace(
+                            tzinfo=gettz(timezone)).timestamp() / 86400 + 25569 + 1
+                        break
+
+        # Fetch uipfields from OppDS Data
+        coll = db[sec_context.name + '.OppDS._uip._data']
         criteria = {'last_modified_time': {'$gt': self.from_timestamp}} if self.from_timestamp else {
             'object.extid': {'$in': self.id_list}}
-        rec_filter = ds.get_model_filter('bookings_rtfm')
-        fieldmap = {}
-        for f in uips:
-            oppds_field = prune_pfx(f)
-            fieldmap.update({f: oppds_field})
+        deals = list(coll.find(criteria, {'_id': 0}))
+        print('Fetched data from OppDS collection in MongoDB for {}'.format(sec_context.name))
 
-        filter_related_fields = [filter_expr if filter_expr[-1:] != ')' else filter_expr[0:-1].split('(')[1]
-                                 for filter_expr, values in rec_filter.items()]
-
-        act_filter_related_fields = [
-            field if "use_value" not in field else field.split(',')[0] if "use_value" not in field.split(',')[0] \
-                else field.split(',')[1] for field in filter_related_fields]
-
-        logger.info("Getting the prepared records. Criteria : %s ", (criteria))
-        prepared_records = sec_context.etl.uip('UIPIterator', dataset='OppDS', record_filter=criteria,
-                                               fields_requested=list(fieldmap.values()) + [
-                                                   self.model_inst.stage_field_name] + act_filter_related_fields)
-        basic_results = []
-
-        for record in prepared_records:
-            logger.info("The featMap of deal {} is {}".format(record.ID, record.featMap))
-            filter_status = record.passes_filterF(rec_filter, epoch().as_epoch())
-            model_prep = self.model_inst.prepare(record)
-            try:
-                if model_prep:
-                    field_list = (model_prep or [])
-                    record.compress(field_list)
-            except:
-                logger.error('Unable to prepare record %s', record.ID)
-                if self.model_inst.raise_prepare_errors:
-                    raise
-                else:
-                    continue
-
+        final_deals = []
+        for deal in deals:
             if use_core_show:
-                allow_deal = filter_status[0] and self.core_show(record)
+                allow_deal = DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
+                                                  record_filter) and DataLoad.core_show(deal['object']['history'], boq, eoq)
             else:
-                allow_deal = self.is_active(record) and filter_status[0]
-
+                allow_deal = DataLoad.is_active(deal['object']['history'], boq) and DataLoad.passes_record_filter(deal['object']['extid'],
+                                                                                                deal['object'][
+                                                                                                    'values'],
+                                                                                                record_filter)
             if allow_deal:
-                result_record = {}
-                oppds_record = {}
-                record.encode(oppds_record)
-                oppds_record = oppds_record['values']
-                for f, oppds_field in fieldmap.items():
-                    result_record[f] = json.loads(oppds_record.get(oppds_field, '"N/A"'))
-                flat_rec = {'res': {}, 'uip': result_record}
-                result_record = gen.get_views(flat_rec)
-                result_record['extid'] = record.ID
-                basic_results.append(result_record)
+                final_deals.append(deal)
             else:
-                if use_core_show:
-                    logger.info(
-                        "The deal {} is filtered out : filter_status[0] is {} and self.core_show(record) is {}".format(
-                            record.ID, filter_status[0], self.core_show(record)))
+                print(
+                    'Skipping deal {} for {} due to record filter'.format(deal['object']['extid'], sec_context.name))
+
+        return final_deals
+
+    @staticmethod
+    def passes_record_filter(opp_id, data, record_filter):
+        if not record_filter:
+            return True
+        from json import loads
+        import re
+        for filter_expr, values in record_filter.items():
+            if filter_expr[-1:] != ')':
+                filter_type, feature = 'in', filter_expr
+            else:
+                filter_type, feature = filter_expr[0:-1].split('(')
+            feature = feature.split(',')[0]
+            if filter_type == 'in':
+                if feature in data:
+                    if loads(data[feature]) not in values:
+                        return False
                 else:
-                    logger.info(
-                        "The deal {} is filtered out : filter_status[0] is {} and self.is_active(record) is {}".format(
-                            record.ID, filter_status[0], self.is_active(record)))
-
-        return basic_results
-
-
-    def is_active(self, record):
-        """
-        Same as the is_active method in forecast-base model, just without the is_closed condition.
-        Always make sure these two are the same
-
-        :param record:
-        :return:
-        """
-
-        stage_at_start = record.getAsOfDateF(self.model_inst.stage_field_name,
-                                             self.model_inst.time_horizon.beginsF)
-        stage_now = self.model_inst.forecast_params.get("stage_override",
-                                                        record.getAsOfDateF(self.model_inst.stage_field_name,
-                                                                            self.model_inst.time_horizon.as_ofF))
-        if stage_now == 'N/A':
-            return False
-
-        if stage_at_start in self.model_inst.win_stages and record.win_date and record.win_date <= self.model_inst.time_horizon.beginsF:
-            return False
-
-        if stage_at_start in self.model_inst.lose_stages and stage_now in self.model_inst.lose_stages:
-            return False
-
+                    return False
+            if filter_type == 'not_in':
+                if feature in data and loads(data[feature]) in values:
+                    return False
+            if filter_type == 'exclude_ids':
+                if opp_id in values:
+                    return False
+            if filter_type == 'include_ids':
+                if opp_id not in values:
+                    return False
+            if filter_type == 'matches':
+                for x in values:
+                    if not re.match(x, str(loads(data[feature]))):
+                        return False
+            if filter_type == 'not_matches':
+                for x in values:
+                    if not re.match(x, str(loads(data[feature]))):
+                        return False
+            # if filter_type == 'range_in':
+            # if filter_type == 'range_not_in':
         return True
 
-    def core_show(self, record):
-        if record.getAsOfDateF('CloseDate_adj', self.model_inst.time_horizon.as_ofF) == 'N/A':
+    @staticmethod
+    def is_active(data, boq):
+        stage_data = data.get('StageTrans_adj', [])
+        if not stage_data:
             return False
-        core_asof_unborn = (record.getAsOfDateF('StageTrans_adj', self.model_inst.time_horizon.as_ofF) == 'N/A') and (
-                record.getAsOfDateF('StageTrans', self.model_inst.time_horizon.as_ofF) == 'N/A')
-        # core_begin_unborn = record.getAsOfDateF('StageTrans_adj',self.model_inst.time_horizon.beginsF) == 'N/A'
-        core_latest_won = record.getAsOfDateF('terminal_fate', self.model_inst.time_horizon.as_ofF) == 'W'
-        core_asof_won = (record.getAsOfDateF('StageTrans_adj',
-                                             self.model_inst.time_horizon.as_ofF) == u'99') and core_latest_won
-        core_begin_won = (record.getAsOfDateF('StageTrans_adj',
-                                              self.model_inst.time_horizon.beginsF) == u'99') and core_latest_won
-        # core_horizon_won = (record.getAsOfDateF('StageTrans_adj', self.model_inst.time_horizon.horizonF) == u'99') and core_latest_won
-        # core_won_event = core_horizon_won and not core_begin_won
+        stage_at_start = DataLoad.getasof(stage_data, boq)
+        stage_now = stage_data[-1][1]
+        if stage_now == 'N/A':
+            return False
+        terminal_fate_data = data.get('terminal_fate', [])
+        if terminal_fate_data:
+            terminal_date = terminal_fate_data[-1][0]
+            terminal_fate = terminal_fate_data[-1][1]
+            if terminal_fate == 'W':
+                if stage_at_start in '99' and terminal_date <= boq:
+                    return False
+            if terminal_fate == 'L':
+                if stage_at_start in '-1' and stage_now in '-1':
+                    return False
+        return True
 
-        a = (record.getAsOfDateF('StageTrans_adj', self.model_inst.time_horizon.as_ofF) == '99') or (
-                record.getAsOfDateF('StageTrans', self.model_inst.time_horizon.as_ofF) == '99')
-        b = record.getAsOfDateF('CloseDate_adj', self.model_inst.time_horizon.as_ofF) <= epoch(
-            self.model_inst.time_horizon.horizonF).as_xldate()
+    @staticmethod
+    def core_show(data, boq, eoq):
+        from time import time
+        time_now_xl = (time() / 86400) + 25569
+        close_date_data = data.get('CloseDate_adj', [])
+        if not close_date_data:
+            return False
+        close_date_now = data['CloseDate_adj'][-1][1]
+        stage_trans_adj_now = data.get('StageTrans_adj', [[0, 'N/A']])[-1][1]
+        stage_trans_adj_boq = DataLoad.getasof(data.get('StageTrans_adj', [[0, 'N/A']]), boq)
+        stage_trans_now = data.get('StageTrans', [[0, 'N/A']])[-1][1]
+        terminal_fate_now = DataLoad.getasof(data.get('terminal_fate', [[0, 'N/A']]), time_now_xl)
+        core_asof_unborn = (stage_trans_adj_now == 'N/A') and (stage_trans_now == 'N/A')
+        core_latest_won = terminal_fate_now == 'W'
+        core_asof_won = (stage_trans_adj_now == u'99') and core_latest_won
+        core_begin_won = (stage_trans_adj_boq == u'99') and core_latest_won
+        a = (stage_trans_adj_now == '99') or (stage_trans_now == '99')
+        b = close_date_now <= eoq
         c = core_latest_won
         d = core_asof_won
-        e = abs(epoch(self.model_inst.time_horizon.horizonF).as_xldate() - epoch(
-            self.model_inst.time_horizon.as_ofF).as_xldate()) > 1000
+        e = abs(eoq - time_now_xl) > 1000
         core_asof_unadj_won = (a and b and c and e) or (d and not e)
-
-        core_asof_lost = (record.getAsOfDateF('StageTrans_adj',
-                                              self.model_inst.time_horizon.as_ofF) == '-1') and not core_asof_unadj_won
-        core_begin_lost = record.getAsOfDateF('StageTrans_adj', self.model_inst.time_horizon.beginsF) == '-1'
-        f = record.getAsOfDateF('CloseDate_adj', self.model_inst.time_horizon.as_ofF) != epoch(
-            self.model_inst.time_horizon.beginsF).as_xldate()
+        core_asof_lost = (stage_trans_adj_now == '-1') and not core_asof_unadj_won
+        core_begin_lost = stage_trans_adj_boq == '-1'
+        f = close_date_now != boq
         core_asof_not_won = not (f and (core_asof_won and core_begin_won))
         core_asof_not_lost = not (f and (core_asof_lost and core_begin_lost))
-        # core_existingpipe = (not core_begin_won and not core_begin_lost) and ((self.model_inst.time_horizon.beginsF > self.model_inst.time_horizon.as_ofF) or not core_begin_unborn)
-        core_show = core_asof_not_won and core_asof_not_lost and not core_asof_unborn
+        return core_asof_not_won and core_asof_not_lost and not core_asof_unborn
 
-        return core_show
+    @classmethod
+    def getasof(cls, history, date):
+        try:
+            sliced = [x for x in history if x[0] <= date]
+            return sliced[-1][1]
+        except:
+            return 'N/A'
 
 
 class RevenueSchedule:
 
-    def __init__(self, period):
+    def __init__(self, period, basic_results):
         self.period = period
+        self.basic_results = basic_results
 
     def revenue_schedule(self):
-        basic_results = []
+        basic_results = self.basic_results
         oppds = Dataset.getByNameAndStage(name='OppDS')
         rev_schedule_config = oppds.models['common'].config.get('rev_schedule_config', {})
         segment_config = oppds.models['common'].config.get('segment_config', {})
