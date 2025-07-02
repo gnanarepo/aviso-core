@@ -7,7 +7,7 @@ from config import HierConfig
 from config import FMConfig
 from config import DRILLDOWN_BUILDERS
 from config import PeriodsConfig
-from infra import DRILLDOWN_COLL
+from infra.constants import DRILLDOWN_COLL
 from infra.read import (fetch_descendant_ids, fetch_hidden_nodes,
                         fetch_node_to_parent_mapping_and_labels,
                         fetch_top_level_nodes, get_as_of_dates,
