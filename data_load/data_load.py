@@ -1,8 +1,6 @@
-from datetime import datetime
-import pytz
 from aviso.settings import sec_context
-from dateutil.tz import gettz
-
+from data_load.active_periods import PeriodResolver
+from abc import ABC, abstractmethod
 from json import loads
 import collections
 import logging
@@ -13,17 +11,57 @@ from data_load.tenants import ms_connection_strings
 from domainmodel.datameta import Dataset
 from utils.date_utils import epoch, current_period
 from utils.misc_utils import prune_pfx
-from utils.result_utils import generate_subscription_same_dd_recs, generate_appannie_dummy_recs, \
-    generate_subscription_recs, generate_expiration_date_renewal_rec, generate_expiration_date_renewal_rec_github, \
-    generate_revenue_recs
+from utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
 from utils.data_load_utils import get_drilldowns, get_dd_list
 
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
 
+
+class CriteriaBuilder(ABC):
+    def __init__(self, data_load):
+        self.data_load = data_load
+
+    @abstractmethod
+    def get_criteria(self):
+        pass
+
+
+class ChipotleCriteriaBuilder(CriteriaBuilder):
+    def get_criteria(self):
+        if self.data_load.from_timestamp:
+            return {'last_modified_time': {'$gte': self.data_load.from_timestamp}}
+        return {'object.extid': {'$in': self.data_load.id_list}}
+
+class CurrentQuarterCriteriaBuilder(CriteriaBuilder):
+    def get_criteria(self):
+        boq, _ = PeriodResolver().get_boq_eoq('current', self.data_load.period)
+        return {'terminal_date': {'$gte': boq}}
+
+class PastQuarterCriteriaBuilder(CriteriaBuilder):
+    def get_criteria(self):
+        boq, eoq = PeriodResolver().get_boq_eoq('historic', self.data_load.period)
+        return {
+            'terminal_date': {'$gte': boq},
+            'created_date': {'$lte': eoq}
+        }
+
+
+
 class DataLoad:
-    def __init__(self, id_list, tenant_name, stack, gbm_stack, pod, etl_stack, from_timestamp=0, changed_fields_only=False):
+    def __init__(
+            self,
+            id_list,
+            tenant_name,
+            stack,
+            gbm_stack,
+            pod,
+            etl_stack,
+            period,
+            run_type='chipotle',
+            from_timestamp=0,
+            changed_fields_only=False):
         self.id_list = id_list
         self.from_timestamp = from_timestamp
         self.tenant_name = tenant_name
@@ -32,6 +70,8 @@ class DataLoad:
         self.pod = pod
         self.etl_stack = etl_stack
         self.changed_fields_only = changed_fields_only
+        self.run_type = run_type
+        self.period = period
 
     def get_basic_results(self):
         ds = Dataset.getByNameAndStage('OppDS', None)
@@ -45,33 +85,11 @@ class DataLoad:
         client = MongoClient(ms_connection_string)
         db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
-        # Get Current Period
-        coll = db[sec_context.name + '.Period._uip._data']
-        records = list(coll.find({}, {'_id': 0}))
-        print('Fetched data from Period collection in MongoDB for {}'.format(sec_context.name))
-        timezone = 'US/Pacific'  # default timezone
-        for record in records:
-            if bool(record['object']['values'].get('TimeZoneSidKey')):
-                timezone = loads(record['object']['values']['TimeZoneSidKey'])
-                break
-        current_date = datetime.now().astimezone(pytz.timezone(timezone)).strftime('%Y%m%d')
-
-        for record in records:
-            if bool(record['object']['values'].get('Type')):
-                if loads(record['object']['values'].get('Type')).lower() == 'quarter':
-                    start_date = loads(record['object']['values']['StartDate'])
-                    end_date = loads(record['object']['values']['EndDate'])
-                    if start_date <= current_date <= end_date:
-                        boq = datetime.strptime(start_date, '%Y%m%d').replace(
-                            tzinfo=gettz(timezone)).timestamp() / 86400 + 25569
-                        eoq = datetime.strptime(end_date, '%Y%m%d').replace(
-                            tzinfo=gettz(timezone)).timestamp() / 86400 + 25569 + 1
-                        break
-
+        boq, eoq = PeriodResolver().get_current_quarter_boq_eoq(self.period)
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
-        criteria = {'last_modified_time': {'$gt': self.from_timestamp}} if self.from_timestamp else {
-            'object.extid': {'$in': self.id_list}}
+        criteria_builder = self._get_criteria_strategy()
+        criteria = criteria_builder.get_criteria()
         deals = list(coll.find(criteria, {'_id': 0}))
         print('Fetched data from OppDS collection in MongoDB for {}'.format(sec_context.name))
 
@@ -113,11 +131,26 @@ class DataLoad:
                                 temp[fld] = val
                         else:
                             temp[fld] = val
+                match temp.get('terminal_fate'):
+                    case 'W':
+                        temp['win_prob'] = 1
+                    case 'L':
+                        temp['win_prob'] = 0
                 final_deals.append(temp)
             else:
                 print('Skipping deal {} for {} due to record filter'.format(deal['object']['extid'], sec_context.name))
 
         return final_deals
+
+    def _get_criteria_strategy(self):
+        if self.run_type == 'chipotle':
+            return ChipotleCriteriaBuilder(self)
+
+        elif self.period  and self.run_type == 'current':
+            return CurrentQuarterCriteriaBuilder(self)
+
+        elif self.period and self.run_type == 'historic':
+            return PastQuarterCriteriaBuilder(self)
 
     @staticmethod
     def passes_record_filter(opp_id, data, record_filter):
@@ -226,10 +259,8 @@ class RevenueSchedule:
         basic_results = self.basic_results
         oppds = Dataset.getByNameAndStage(name='OppDS')
         rev_schedule_config = oppds.models['common'].config.get('rev_schedule_config', {})
-        segment_config = oppds.models['common'].config.get('segment_config', {})
         drilldown = rev_schedule_config.get('drilldown', 'Revenue')
         close_date_fld = rev_schedule_config.get('close_date_fld', 'CloseDate')
-        filt_config = rev_schedule_config.get('filt_config', {})
         rev_schedule_field = rev_schedule_config.get('rev_schedule_field', 'RevSchedule')
         if rev_schedule_config.get('prd_rev_schedule', False):
             # convert basic_results to dict format
@@ -237,20 +268,12 @@ class RevenueSchedule:
             basic_results_dict = self.rev_schedule_by_period(rev_schedule_field, basic_results_dict)
             rev_period = self.period if self.period else current_period(a_datetime=epoch().as_datetime()).mnemonic
             logger.info('fetching records for period: %s', rev_period)
-            if rev_schedule_config.get('prd_subs_schedule_same_dd', False):
-                if not isinstance(drilldown, list):
-                    drilldown = [drilldown]
-                basic_results_dict = generate_subscription_same_dd_recs(rev_period, drilldown, close_date_fld,
-                                                                        basic_results_dict, filt_config)
-            elif rev_schedule_config.get('appannie_prd_rev_schedule', False):
+            if rev_schedule_config.get('appannie_prd_rev_schedule', False):
                 basic_results_dict_copy = deepcopy(basic_results_dict)
                 basic_results_dict = {}
                 for opp_id, res in basic_results_dict_copy.items():
                     output_dict = generate_appannie_dummy_recs(rev_period, rev_schedule_config, opp_id, res)
                     basic_results_dict.update(output_dict)
-            elif rev_schedule_config.get('prd_subs_schedule', False):
-                basic_results_dict = generate_subscription_recs(rev_period, drilldown, close_date_fld,
-                                                                basic_results_dict)
             elif rev_schedule_config.get('expiration_date_renewals_rec', False):
                 renewal_drilldown = rev_schedule_config.get('renewal_drilldown', 'Renewal')
                 close_date_fld = rev_schedule_config.get('close_date_fld', 'CloseDate')
@@ -263,22 +286,6 @@ class RevenueSchedule:
                     output_dict = generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld,
                                                                        expiration_date_fld, type_fld, renewal_vals,
                                                                        opp_id, res)
-                    basic_results_dict.update(output_dict)
-            elif rev_schedule_config.get('github_metered_billing', False):
-                renewal_drilldown = rev_schedule_config.get('renewal_drilldown', 'Renewal')
-                close_date_fld = rev_schedule_config.get('close_date_fld', 'CloseDate')
-                expiration_date_fld = rev_schedule_config.get('expiration_date_fld', 'ExpirationDate')
-                type_fld = rev_schedule_config.get('type_fld', 'Type')
-                renewal_vals = rev_schedule_config.get('renewal_vals', ['Renewal'])
-                basic_results_dict_copy = deepcopy(basic_results_dict)
-                basic_results_dict = {}
-                for opp_id, res in basic_results_dict_copy.items():
-                    output_dict = generate_expiration_date_renewal_rec_github(rev_period, renewal_drilldown,
-                                                                              close_date_fld,
-                                                                              expiration_date_fld, type_fld,
-                                                                              renewal_vals, segment_config,
-                                                                              rev_schedule_config,
-                                                                              opp_id, res)
                     basic_results_dict.update(output_dict)
             else:
                 basic_results_dict = generate_revenue_recs(rev_period, drilldown, close_date_fld, basic_results_dict)
