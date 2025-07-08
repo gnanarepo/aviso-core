@@ -36,16 +36,13 @@ class ChipotleCriteriaBuilder(CriteriaBuilder):
 
 class CurrentQuarterCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
-        boq, _ = PeriodResolver().get_boq_eoq('current', self.data_load.period)
-        return {'terminal_date': {'$gte': boq}}
+        boq, _, current_active_period = PeriodResolver().get_boq_eoq('current', self.data_load.period)
+        return {'object.terminal_date': {'$gte': ((boq / 1000.0) / 86400 + 25569)}}
 
 class PastQuarterCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
-        boq, eoq = PeriodResolver().get_boq_eoq('historic', self.data_load.period)
-        return {
-            'terminal_date': {'$gte': boq},
-            'created_date': {'$lte': eoq}
-        }
+        boq, eoq = PeriodResolver().get_boq_eoq('historical', self.data_load.period)
+        return {'object.created_date': {'$lte': ((eoq / 1000.0) / 86400 + 25569)}, 'object.terminal_date': {'$gte': ((boq / 1000.0) / 86400 + 25569)}}
 
 
 
@@ -85,45 +82,62 @@ class DataLoad:
         client = MongoClient(ms_connection_string)
         db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
-        boq, eoq = PeriodResolver().get_current_quarter_boq_eoq(self.period)
+        boq, eoq = PeriodResolver().get_current_quarter_boq_eoq()
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy()
         criteria = criteria_builder.get_criteria()
         deals = list(coll.find(criteria, {'_id': 0}))
         print('Fetched data from OppDS collection in MongoDB for {}'.format(sec_context.name))
+        active_periods = PeriodResolver().fetch_actvie_periods()
+
+        # Build a set of periods that are historic (relative_period == 'h')
+        historic_periods = set()
+        for year_data in active_periods.values():
+            if isinstance(year_data, dict):
+                quarters = year_data.get('quarters', {})
+                for period_key, period_data in quarters.items():
+                    if period_data.get('relative_period') == 'h':
+                        historic_periods.add(period_key)
 
         final_deals = []
-        from_timestamp_xl = (self.from_timestamp / 1000.0) / 86400 + 25569
+        from_timestamp_xl = self.from_timestamp / 1000.0 / 86400 + 25569
+
         for deal in deals:
             if use_core_show:
-                allow_deal = DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
-                                                  record_filter) and DataLoad.core_show(deal['object']['history'], boq, eoq)
+                allow_deal = (
+                        DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'], record_filter)
+                        and DataLoad.core_show(deal['object']['history'], boq, eoq)
+                )
             else:
-                allow_deal = DataLoad.is_active(deal['object']['history'], boq) and DataLoad.passes_record_filter(deal['object']['extid'],
-                                                                                                deal['object'][
-                                                                                                    'values'],
-                                                                                                record_filter)
-            if allow_deal:
+                allow_deal = (
+                        DataLoad.is_active(deal['object']['history'], boq)
+                        and DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
+                                                          record_filter)
+                )
+
+            if allow_deal and self.run_type == 'historical' and self.period in historic_periods:
                 temp = {'extid': deal['object']['extid']}
                 values = deal['object']['values']
+
                 if self.from_timestamp and self.changed_fields_only:
                     history = deal['object']['history']
                     for fld in uipfield:
-                        value = history.get(prune_pfx(fld), [[0.0, 'N/A']])
-                        if value[-1][0] > from_timestamp_xl:
-                            temp[fld] = value[-1][1]
+                        value = history.get(prune_pfx(fld, 'uip_'), [[0.0, 'N/A']])
+                        temp[fld] = DataLoad.getasof(value, from_timestamp_xl)
                 else:
                     for fld in uipfield:
                         value = values.get(prune_pfx(fld), 'N/A')
                         try:
-                            temp[fld] = loads(value)
-                        except:
+                            temp[fld] = value[-1][-1]
+                        except (IndexError, TypeError):
                             temp[fld] = value
-                print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+
+                print(f'Computing drilldowns for {deal["object"]["extid"]} {self.tenant_name}')
                 drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
-                print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+                print(f'Computed drilldowns for {deal["object"]["extid"]} {self.tenant_name}')
                 temp['__segs'] = drilldown_list
+
                 if split_fields:
                     for fld, val in split_fields.items():
                         if self.from_timestamp and self.changed_fields_only:
@@ -131,15 +145,15 @@ class DataLoad:
                                 temp[fld] = val
                         else:
                             temp[fld] = val
-                match temp.get('terminal_fate'):
-                    case 'W':
-                        temp['win_prob'] = 1
-                    case 'L':
-                        temp['win_prob'] = 0
+
+                if temp.get('terminal_fate') == 'W':
+                    temp['win_prob'] = 1
+                elif temp.get('terminal_fate') == 'L':
+                    temp['win_prob'] = 0
+
                 final_deals.append(temp)
             else:
-                print('Skipping deal {} for {} due to record filter'.format(deal['object']['extid'], sec_context.name))
-
+                print(f'Skipping deal {deal["object"]["extid"]} for {sec_context.name} due to record filter')
         return final_deals
 
     def _get_criteria_strategy(self):
@@ -149,7 +163,7 @@ class DataLoad:
         elif self.period  and self.run_type == 'current':
             return CurrentQuarterCriteriaBuilder(self)
 
-        elif self.period and self.run_type == 'historic':
+        elif self.period and self.run_type == 'historical':
             return PastQuarterCriteriaBuilder(self)
 
     @staticmethod
