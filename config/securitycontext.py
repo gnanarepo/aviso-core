@@ -49,9 +49,9 @@ def initialize_system():
     security_context = SecurityContext()
 
     # Settings
-    period = '2026Q1'
+    period = '2025Q1'
     user_name = 'waqas.ahmed'
-    tenant_name = 'cisco_qa.com'
+    tenant_name = 'armis_rts.com'
     # tenant_name = 'cisco_qa_cache_preprod'
 
     # Create tenant with required methods
@@ -114,19 +114,25 @@ if __name__ == '__main__':
 
         # Import DealConfig after Django is initialized
         from config.deal_config import DealConfig
-
+        from data_load.deals_results import get_deals_results
         db = security_context.get_tenant_db()
         print(db)
-        print("GET Tenant DB:", db.deals.estimated_document_count())
-        print("DB name: ", db.name)
-        print("DB deals name: ", db.deals.name)
-        print("DB deals count: ", db.deals.find_one())
-        print("GET Tenant DB collections:", db.list_collection_names())
-        # Print the database and collection names: print(db.name, db.deals.name)
-        # Use db.deals.count_documents({}) for an accurate count.
-
-        deal_config = DealConfig()
-        print("Deal Config:", deal_config.config.get('update_new_collection'))
+        result=get_deals_results(
+            tenant_name='armis_rts.com',
+            stack='preprod',
+            gbm_stack='gbm-qa',
+            etl_stack='etl-qa',
+            pod='dev',
+            period='2025Q1',
+            timestamp=None,
+            get_results_from_as_of=0,
+            fields=[],
+            node=None,
+            force_uip_and_hierarchy=False
+        )
+        print(result)
+        # deal_config = DealConfig()
+        # print("Deal Config:", deal_config.config.get('update_new_collection'))
 
     except Exception as e:
         print(f"Error during initialization: {str(e)}")
