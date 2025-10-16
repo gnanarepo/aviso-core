@@ -15,7 +15,11 @@ def get_drilldowns(tenant_name, stack, viewgen_config):
                              {'to': {'$gte': as_of}}]}
                 ]}
     drilldowns = list(coll.find(criteria, {'_id': 0}))
-    parents = {record['node']: record['parent'] for record in drilldowns}
+    parents = {
+        record['node']: record['parent']
+        for record in drilldowns
+        if 'node' in record and 'parent' in record
+    }
     all_nodes = {node: [node] for node in list(parents.keys())}
     pivots = list(set([node.split('#')[0] for node in parents]))
     for node in all_nodes:
