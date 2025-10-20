@@ -1,5 +1,6 @@
 from aviso.settings import sec_context
-from data_load.active_periods import PeriodResolver
+from aviso.utils.dateUtils import TimeHorizon
+
 from abc import ABC, abstractmethod
 from json import loads
 import collections
@@ -9,7 +10,7 @@ from pymongo import MongoClient
 
 from data_load.tenants import ms_connection_strings
 from domainmodel.datameta import Dataset
-from utils.date_utils import epoch, current_period
+from utils.date_utils import epoch, current_period, epoch2xl
 from utils.misc_utils import prune_pfx
 from utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
 from utils.data_load_utils import get_drilldowns, get_dd_list
@@ -20,8 +21,10 @@ logger = logging.getLogger('gnana.%s' % __name__)
 
 
 class CriteriaBuilder(ABC):
-    def __init__(self, data_load):
+    def __init__(self, data_load, boq, eoq):
         self.data_load = data_load
+        self.boq = boq
+        self.eoq = eoq
 
     @abstractmethod
     def get_criteria(self):
@@ -36,15 +39,13 @@ class ChipotleCriteriaBuilder(CriteriaBuilder):
 
 class CurrentQuarterCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
-        boq, _ = PeriodResolver().get_boq_eoq('current', self.data_load.period)
-        return {'terminal_date': {'$gte': boq}}
+        return {'terminal_date': {'$gte': self.boq}}
 
 class PastQuarterCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
-        boq, eoq = PeriodResolver().get_boq_eoq('historic', self.data_load.period)
         return {
-            'terminal_date': {'$gte': boq},
-            'created_date': {'$lte': eoq}
+            'terminal_date': {'$gte': self.boq},
+            'created_date': {'$lte': self.eoq}
         }
 
 
@@ -77,6 +78,11 @@ class DataLoad:
         ds = Dataset.getByNameAndStage('OppDS', None)
         use_core_show = ds.models['common'].config.get('fastlane_config', {}).get('use_core_show')
         viewgen_config = ds.models['common'].config.get('viewgen_config', {})
+
+        th = TimeHorizon()
+        boq = epoch(th.beginsF).as_xldate()
+        eoq = epoch(th.horizonF).as_xldate()
+
         uipfield = ds.params['general']['uipfield']
         record_filter = ds.get_model_filter('bookings_rtfm')
         drilldowns = get_drilldowns(self.tenant_name, self.stack, viewgen_config)
@@ -85,12 +91,17 @@ class DataLoad:
         client = MongoClient(ms_connection_string)
         db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
-        boq, eoq = PeriodResolver().get_current_quarter_boq_eoq(self.period)
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
-        criteria_builder = self._get_criteria_strategy()
+        criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
         criteria = criteria_builder.get_criteria()
+        prepared_records = sec_context.etl.uip('UIPIterator', dataset='OppDS', record_filter=criteria)
+        count = sum(1 for _ in prepared_records)
+        print(f"etl uip gave: {count} results")
         deals = list(coll.find(criteria, {'_id': 0}))
+
+        print(f"got result length of deals: {len(deals)}")
+
         print('Fetched data from OppDS collection in MongoDB for {}'.format(sec_context.name))
 
         final_deals = []
@@ -104,53 +115,53 @@ class DataLoad:
                                                                                                 deal['object'][
                                                                                                     'values'],
                                                                                                 record_filter)
-            if allow_deal:
-                temp = {'extid': deal['object']['extid']}
-                values = deal['object']['values']
-                if self.from_timestamp and self.changed_fields_only:
-                    history = deal['object']['history']
-                    for fld in uipfield:
-                        value = history.get(prune_pfx(fld), [[0.0, 'N/A']])
-                        if value[-1][0] > from_timestamp_xl:
-                            temp[fld] = value[-1][1]
-                else:
-                    for fld in uipfield:
-                        value = values.get(prune_pfx(fld), 'N/A')
-                        try:
-                            temp[fld] = loads(value)
-                        except:
-                            temp[fld] = value
-                print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
-                drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
-                print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
-                temp['__segs'] = drilldown_list
-                if split_fields:
-                    for fld, val in split_fields.items():
-                        if self.from_timestamp and self.changed_fields_only:
-                            if fld in temp:
-                                temp[fld] = val
-                        else:
-                            temp[fld] = val
-                match temp.get('terminal_fate'):
-                    case 'W':
-                        temp['win_prob'] = 1
-                    case 'L':
-                        temp['win_prob'] = 0
-                final_deals.append(temp)
+
+            temp = {'extid': deal['object']['extid']}
+            temp['is_delete'] = False if allow_deal else True
+
+            values = deal['object']['values']
+            if self.from_timestamp and self.changed_fields_only:
+                history = deal['object']['history']
+                for fld in uipfield:
+                    value = history.get(prune_pfx(fld), [[0.0, 'N/A']])
+                    if value[-1][0] > from_timestamp_xl:
+                        temp[fld] = value[-1][1]
             else:
-                print('Skipping deal {} for {} due to record filter'.format(deal['object']['extid'], sec_context.name))
+                for fld in uipfield:
+                    value = values.get(prune_pfx(fld), 'N/A')
+                    try:
+                        temp[fld] = loads(value)
+                    except:
+                        temp[fld] = value
+            print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+            drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
+            print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+            temp['__segs'] = drilldown_list
+            if split_fields:
+                for fld, val in split_fields.items():
+                    if self.from_timestamp and self.changed_fields_only:
+                        if fld in temp:
+                            temp[fld] = val
+                    else:
+                        temp[fld] = val
+            match temp.get('terminal_fate'):
+                case 'W':
+                    temp['win_prob'] = 1
+                case 'L':
+                    temp['win_prob'] = 0
+            final_deals.append(temp)
 
         return final_deals
 
-    def _get_criteria_strategy(self):
+    def _get_criteria_strategy(self, boq, eoq):
         if self.run_type == 'chipotle':
-            return ChipotleCriteriaBuilder(self)
+            return ChipotleCriteriaBuilder(self, boq=boq, eoq=eoq)
 
         elif self.period  and self.run_type == 'current':
-            return CurrentQuarterCriteriaBuilder(self)
+            return CurrentQuarterCriteriaBuilder(self, boq=boq, eoq=eoq)
 
         elif self.period and self.run_type == 'historic':
-            return PastQuarterCriteriaBuilder(self)
+            return PastQuarterCriteriaBuilder(self, boq=boq, eoq=eoq)
 
     @staticmethod
     def passes_record_filter(opp_id, data, record_filter):
@@ -214,30 +225,38 @@ class DataLoad:
     @staticmethod
     def core_show(data, boq, eoq):
         from time import time
-        time_now_xl = (time() / 86400) + 25569
+        time_now_xl = (time() / 86400) + 25569  # current as-of date in Excel format
+
         close_date_data = data.get('CloseDate_adj', [])
         if not close_date_data:
             return False
-        close_date_now = data['CloseDate_adj'][-1][1]
-        stage_trans_adj_now = data.get('StageTrans_adj', [[0, 'N/A']])[-1][1]
+
+        # Correct: use getasof instead of last entry
+        close_date_now = DataLoad.getasof(close_date_data, time_now_xl)
+
+        stage_trans_adj_now = DataLoad.getasof(data.get('StageTrans_adj', [[0, 'N/A']]), time_now_xl)
         stage_trans_adj_boq = DataLoad.getasof(data.get('StageTrans_adj', [[0, 'N/A']]), boq)
-        stage_trans_now = data.get('StageTrans', [[0, 'N/A']])[-1][1]
+        stage_trans_now = DataLoad.getasof(data.get('StageTrans', [[0, 'N/A']]), time_now_xl)
         terminal_fate_now = DataLoad.getasof(data.get('terminal_fate', [[0, 'N/A']]), time_now_xl)
+
         core_asof_unborn = (stage_trans_adj_now == 'N/A') and (stage_trans_now == 'N/A')
         core_latest_won = terminal_fate_now == 'W'
-        core_asof_won = (stage_trans_adj_now == u'99') and core_latest_won
-        core_begin_won = (stage_trans_adj_boq == u'99') and core_latest_won
+        core_asof_won = (stage_trans_adj_now == '99') and core_latest_won
+        core_begin_won = (stage_trans_adj_boq == '99') and core_latest_won
+
         a = (stage_trans_adj_now == '99') or (stage_trans_now == '99')
         b = close_date_now <= eoq
         c = core_latest_won
         d = core_asof_won
         e = abs(eoq - time_now_xl) > 1000
         core_asof_unadj_won = (a and b and c and e) or (d and not e)
+
         core_asof_lost = (stage_trans_adj_now == '-1') and not core_asof_unadj_won
-        core_begin_lost = stage_trans_adj_boq == '-1'
+        core_begin_lost = (stage_trans_adj_boq == '-1')
         f = close_date_now != boq
         core_asof_not_won = not (f and (core_asof_won and core_begin_won))
         core_asof_not_lost = not (f and (core_asof_lost and core_begin_lost))
+
         return core_asof_not_won and core_asof_not_lost and not core_asof_unborn
 
     @classmethod
@@ -264,6 +283,7 @@ class RevenueSchedule:
         rev_schedule_field = rev_schedule_config.get('rev_schedule_field', 'RevSchedule')
         if rev_schedule_config.get('prd_rev_schedule', False):
             # convert basic_results to dict format
+            extids_before_rev_schedule = [record['extid'] for record in basic_results]
             basic_results_dict = self.get_results_dict(basic_results)
             basic_results_dict = self.rev_schedule_by_period(rev_schedule_field, basic_results_dict)
             rev_period = self.period if self.period else current_period(a_datetime=epoch().as_datetime()).mnemonic
@@ -292,8 +312,15 @@ class RevenueSchedule:
 
             # convert basic_results to list format
             basic_results = self.get_results_list(basic_results_dict)
-        return basic_results
+            extids_in_basic_results = [record['extid'] for record in basic_results]
+            exluded_extids = [extid for extid in extids_before_rev_schedule if extid not in extids_in_basic_results]
+            for opp_id in exluded_extids:
+                basic_results.append({'extid': opp_id,
+                                      'is_delete': True})
 
+        if basic_results:
+            return basic_results
+        return {'error': 'No records returned from etl OppDS for given criteria'}
     def get_results_dict(self, res_list):
         ret_val = {}
         for rec in res_list:
