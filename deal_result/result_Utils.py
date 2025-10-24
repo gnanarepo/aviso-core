@@ -934,54 +934,12 @@ def get_results_objects(
                                cache_key=cache_key,
                                exec_time=exec_time,)
 
-
-    #added by waqas for testing purpose
-    pod='dev'
-    #gbm_stack = sec_context.details.get('etl_stack', 'etl-qa')
-    gbm_stack='gbm-qa'
-    # tenant_name = sec_context.details.get('tenant_name')
-    tenant_name= 'wiz_qa.io'
-    # # client = MongoClient("mongodb://mongo-fmapp-qa-shard0-0.aviso.com:27016")
-    # # tenant_db_name = tenant_name + "_db_" + gbm_stage # armis_rts_db_gbm-qa
-    # # db = client[tenant_db_name]
-    ms_connection_string = ms_connection_strings(pod)
-    logger.info('Connecting to MongoDB for %s %s', tenant_name, pod)
-    client = MongoClient(ms_connection_string, tz_aware=True)
-    # db = client[tenant_name.split('.')[0] + '_db_' + gbm_stack]
-    tenant_base = tenant_name
-    if '.com' not in tenant_name:
-        parts = tenant_name.split('.')
-        if len(parts) > 1:
-            tenant_base = parts[0] + '-' + '-'.join(parts[1:])
-        else:
-            tenant_base = tenant_name  # fallback if no dot
-
-    db = client[tenant_base + '_db_' + gbm_stack]
-
-
-    criteria={'object.run_time_horizon': res_cls.run_time_horizon}
-    # counts=res_cls.find_count(criteria)
-    # print(counts)
-    run_config=db[res_cls.RunInfoClass.getCollectionName()].find(criteria)
-    #run_config=res_cls.RunInfoClass.getByFieldValue('run_time_horizon', res_cls.run_time_horizon)
-
-#    run_config = res_cls.RunInfoClass.getByFieldValue('run_time_horizon', res_cls.run_time_horizon)
-
-    #added by waqas for testing
-
-    for r in run_config:
-        if 'object' in r:
-            run_doc = r['object']
-        break
-
-    as_of = run_doc.get('as_of')
-    begins = run_doc.get('begins')
-    horizon = run_doc.get('horizon')
+    run_config = res_cls.RunInfoClass.getByFieldValue('run_time_horizon', res_cls.run_time_horizon)
     if not run_config:
         raise GnanaError(
             "No run config found for ds_name=%s, model_name=%s, cache_key=%s, stage_name=%s" % (
                 ds_name, model_name, cache_key, stage_name))
-    time_horizon = get_time_horizon(as_of=as_of, begins=begins, horizon=horizon)
+    time_horizon = get_time_horizon(as_of=run_config.as_of, begins=run_config.begins, horizon=run_config.horizon)
     model_inst = ds_inst.get_model_instance(model_name, time_horizon, drilldowns)
     criteria = {'object.run_time_horizon': res_cls.run_time_horizon}
     if get_results_from_as_of:
@@ -997,37 +955,9 @@ COUNT_MISMATCH = "Result count in run_config(%s) is not matching record count(%s
 def validate_results(res_cls, model_inst):
     run_time_horizon = res_cls.run_time_horizon
     encrypted_run_time_horizon = res_cls.run_time_horizon
-    #added by waqas for testing purpose
-    pod='dev'
-    #gbm_stack = sec_context.details.get('etl_stack', 'etl-qa')
-    gbm_stack='gbm-qa'
-    # tenant_name = sec_context.details.get('tenant_name')
-    tenant_name= 'wiz_qa.io'
-    # # client = MongoClient("mongodb://mongo-fmapp-qa-shard0-0.aviso.com:27016")
-    # # tenant_db_name = tenant_name + "_db_" + gbm_stage # armis_rts_db_gbm-qa
-    # # db = client[tenant_db_name]
-    ms_connection_string = ms_connection_strings(pod)
-    logger.info('Connecting to MongoDB for %s %s', tenant_name, pod)
-    client = MongoClient(ms_connection_string, tz_aware=True)
-    tenant_base = tenant_name
-    if '.com' not in tenant_name:
-        parts = tenant_name.split('.')
-        if len(parts) > 1:
-            tenant_base = parts[0] + '-' + '-'.join(parts[1:])
-        else:
-            tenant_base = tenant_name  # fallback if no dot
-
-    db = client[tenant_base + '_db_' + gbm_stack]
-    run_result=db[res_cls.RunInfoClass.getCollectionName()].find(
-        {'object.run_time_horizon': encrypted_run_time_horizon})
-    result_count=db[res_cls.RunInfoClass.getCollectionName()].find(
-        {'object.run_time_horizon': encrypted_run_time_horizon}).count()
-
-
-
-    # run_result = gnana_db.findDocuments(
-        # res_cls.RunInfoClass.getCollectionName(), {'object.run_time_horizon': encrypted_run_time_horizon})
-    #result_count = res_cls.find_count({'object.run_time_horizon': encrypted_run_time_horizon})
+    run_result = gnana_db.findDocuments(
+         res_cls.RunInfoClass.getCollectionName(), {'object.run_time_horizon': encrypted_run_time_horizon})
+    result_count = res_cls.find_count({'object.run_time_horizon': encrypted_run_time_horizon})
 
     try:
         for i in run_result:
@@ -1314,42 +1244,9 @@ def get_individual_results_generator(
 
 
     if cached_records is None:
-        #added by waqas for testing purpose
-        pod='dev'
-        #gbm_stack = sec_context.details.get('etl_stack', 'etl-qa')
-        gbm_stack='gbm-qa'
-        # tenant_name = sec_context.details.get('tenant_name')
-        tenant_name= 'wiz_qa.io'
-        period='2025Q2'
-        # # client = MongoClient("mongodb://mongo-fmapp-qa-shard0-0.aviso.com:27016")
-        # # tenant_db_name = tenant_name + "_db_" + gbm_stage # armis_rts_db_gbm-qa
-        # # db = client[tenant_db_name]
-        ms_connection_string = ms_connection_strings(pod)
-        logger.info('Connecting to MongoDB for %s %s', tenant_name, pod)
-        client = MongoClient(ms_connection_string, tz_aware=True)
-
-        tenant_base = tenant_name
-        if '.com' not in tenant_name:
-            parts = tenant_name.split('.')
-        if len(parts) > 1:
-            tenant_base = parts[0] + '-' + '-'.join(parts[1:])
-        else:
-            tenant_base = tenant_name  # fallback if no dot
-
-        db = client[tenant_base + '_db_' + gbm_stack]
-        #    runs = gnana_db.findDocuments(res_cls.RunInfoClass.getCollectionName(), criteria)
-        #criteria={'$and': [{'run_time_horizon': cache_key}]}
-        #    'armis_rts.com.OppDS._results.existingpipeforecast._result.2025Q2'
-
-        coll = db[f"{tenant_name}.OppDS._results.existingpipeforecast._result.{period}"]
-        criteria={'object.run_time_horizon': 'custom_Reporting_20240501000000_20240731235959_20240731235959'}
-
-
-
-        all_results =coll.find(criteria)
-
-        print(list(all_results))
         all_results = res_cls.findDocuments(criteria)
+        print(f"Total records fetched from DB: {len(list(res_cls.findDocuments(criteria)))}")
+
     else:
         all_results = cached_records
 
@@ -1371,12 +1268,8 @@ def get_individual_results_generator(
     first_record = True
     record_dict = {}
     ext_id_list = []
-    for record in coll.find(criteria):
+    for record in all_results:
         obj = record['object']
-
-        # added by waqas to skip records with no extid
-        if not obj['extid']:
-            continue
         extid = obj['extid']
         if first_record:
             # These steps are done to avoid calling add_prefix multiple times.
@@ -1632,33 +1525,9 @@ def get_individual_result_runs(inputs, **kwargs):
                 criteria.append({'$or': [{'object.%s' % fld_name: x} for x in mnem]})
             else:
                 criteria.append({"object.%s" % fld_name: mnem[0]})
-#changes made by waqas ahmed for testing purpose
-    criteria = {"$and": criteria} if criteria else {}
-    pod='dev'
-    #gbm_stack = sec_context.details.get('etl_stack', 'etl-qa')
-    gbm_stack='gbm-qa'
     res_cls = get_result_class(ds, model_cls)
-    # tenant_name = sec_context.details.get('tenant_name')
-    tenant_name= 'wiz_qa.io'
-    # # client = MongoClient("mongodb://mongo-fmapp-qa-shard0-0.aviso.com:27016")
-    # # tenant_db_name = tenant_name + "_db_" + gbm_stage # armis_rts_db_gbm-qa
-    # # db = client[tenant_db_name]
-    ms_connection_string = ms_connection_strings(pod)
-    logger.info('Connecting to MongoDB for %s %s', tenant_name, pod)
-    client = MongoClient(ms_connection_string)
-    tenant_base = tenant_name
-    if '.com' not in tenant_name:
-        parts = tenant_name.split('.')
-        if len(parts) > 1:
-            tenant_base = parts[0] + '-' + '-'.join(parts[1:])
-        else:
-            tenant_base = tenant_name
-    db = client[tenant_base + '_db_' + gbm_stack]
-
-#    runs = gnana_db.findDocuments(res_cls.RunInfoClass.getCollectionName(), criteria)
-    runs=db[res_cls.RunInfoClass.getCollectionName()].find(criteria)
-#     runs = gnana_db.findDocuments(res_cls.RunInfoClass.getCollectionName(), criteria)
-    print(len(list(runs)))
+    criteria = {"$and": criteria} if criteria else {}
+    runs = gnana_db.findDocuments(res_cls.RunInfoClass.getCollectionName(), criteria)
     result = []
     for r in runs:
         run_time_horizon = r['object']['run_time_horizon']
@@ -2087,7 +1956,8 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
         if not ck.startswith('live'):
             if not if_exists:
                 logger.info("Saving {} to daily-results bucket in s3".format(file_name))
-                gnana_storage.save_daily_results_to_s3(file_name, results[timestamp])
+                # gnana_storage.save_daily_results_to_s3(file_name, results[timestamp])
+
             if if_exists:
                 logger.info("Reading {} from daily-results bucket in s3".format(file_name))
                 results[timestamp] = gnana_storage.read_daily_results_from_s3(file_name)
@@ -2118,6 +1988,5 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
                                 else:
                                     new_results[deal][fld] = val
                 results[timestamp]['results'] = new_results
-
     return results
 
