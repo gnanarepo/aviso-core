@@ -300,3 +300,12 @@ def incr_cache_version(cache_type, cache_keys):
             if isinstance(version, int):
                 set_nested(version, path, val + 1)
     sec_context.details.set_flag(cache_type, 'versions', cache_flag)
+
+
+from functools import lru_cache
+from pymongo import MongoClient
+@lru_cache(maxsize=None)
+def get_mongo_client(fa_connection_strings: str):
+    """Cache and reuse MongoClient instances per connection string."""
+    logger.info("Creating new MongoClient for %s", fa_connection_strings)
+    return MongoClient(fa_connection_strings, tz_aware=True)

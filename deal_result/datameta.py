@@ -26,9 +26,9 @@ import memcache
 from analyticengine.forecast import Forecast
 from analyticengine.forecast2 import Forecast2
 from analyticengine.forecast5 import Forecast5
-from analyticengine.unborn_base import UnbornBaseModel
-from analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
-from analyticengine.forecast2_no_ads import Forecast2_no_ds
+# from analyticengine.unborn_base import UnbornBaseModel
+# from analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
+# from analyticengine.forecast2_no_ads import Forecast2_no_ds
 
 #gnana settings may be removed later by waqas
 from aviso.framework.postgresdb import GnanaPostgresDB
@@ -96,12 +96,12 @@ FieldType = namedtuple('FieldType', [
 
 # --- Model Support ---
 model_types = {
-    'forecast.Forecast': Forecast,
-    'forecast2.Forecast2': Forecast2,
+    # 'forecast.Forecast': Forecast,
+    # 'forecast2.Forecast2': Forecast2,
     'forecast5.Forecast5': Forecast5,
-    'forecast.UnbornForecast': UnbornBaseModel,
-    'forecast.UnbornForecastZD': UnbornBaseModelZeroDawn,
-    'forecast2.Forecast2_no_ds': Forecast2_no_ds,
+    # 'forecast.UnbornForecast': UnbornBaseModel,
+    # 'forecast.UnbornForecastZD': UnbornBaseModelZeroDawn,
+    # 'forecast2.Forecast2_no_ds': Forecast2_no_ds,
 }
 idx_list = {'extid': {},
             'when': {},
@@ -642,7 +642,7 @@ def get_meta_info(ds_inst, model_inst_or_cls, cache_key, col_type):
                           res_or_stage])
     # get the number of days to retain the results past horizon date
     days_to_retain = model_inst_or_cls.config.get("retention_days", None)
-    if(not days_to_retain):
+    if not days_to_retain:
         tenant_details = sec_context.details
         days_to_retain = tenant_details.get_config('results',
                                                    'retention_days', 7)

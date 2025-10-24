@@ -34,24 +34,6 @@ class DealsResults:
     '''
     http_method_names = ['get', 'post']
     restrict_to_roles = {AvisoView.Role.Gnacker}
-    def __init__(self, tenant_name, stack, gbm_stack, pod, etl_stack):
-        self.tenant_name = tenant_name
-        self.stack = stack
-        self.gbm_stack = gbm_stack
-        self.pod = pod
-        self.etl_stack = etl_stack
-        # Configs & setup
-        (self.viewgen_config,
-         self.uipfield,
-         self.win_score_config) = get_static_configs()
-
-        self.drilldowns = get_drilldowns(tenant_name, stack, self.viewgen_config)
-
-        ms_connection_string = ms_connection_strings(pod)
-        logger.info('Connecting to MongoDB for %s %s', tenant_name, pod)
-        self.client = MongoClient(ms_connection_string)
-        self.db = self.client[tenant_name.split('.')[0] + '_db_' + etl_stack]
-
     def get(self,  periods,
             timestamps,
             get_results_from_as_of,
@@ -160,9 +142,8 @@ def get_static_configs():
 
     return viewgen_config, uipfield,win_score_config
 
-def get_deals_results(tenant_name, stack, gbm_stack, etl_stack, pod,
-                      periods, timestamps, get_results_from_as_of, fields, node, force_uip_and_hierarchy,include_uip,allow_live,return_files_list):
-    service = DealsResults(tenant_name, stack, gbm_stack, pod, etl_stack)
+def get_deals_results(periods, timestamps, get_results_from_as_of, fields, node, force_uip_and_hierarchy,include_uip,allow_live,return_files_list):
+    service = DealsResults()
     data=service.get(
         periods=periods,
         timestamps=timestamps,
@@ -174,6 +155,6 @@ def get_deals_results(tenant_name, stack, gbm_stack, etl_stack, pod,
         allow_live=allow_live,
         return_files_list=return_files_list
     )
-    for i in data:
-        print(i)
+    for _ in data:
+        pass
 

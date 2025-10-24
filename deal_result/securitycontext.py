@@ -50,9 +50,9 @@ def initialize_system():
 
 
     # Settings
-    period = '2025Q1'
+    period = '2025Q3'
     user_name = 'waqas.ahmed'
-    tenant_name = 'wiz_qa.io'
+    tenant_name = 'armis_rts.com'
     # tenant_name = 'cisco_qa_cache_preprod'
 
     # Create tenant with required methods
@@ -118,12 +118,7 @@ if __name__ == '__main__':
         db = security_context.get_tenant_db()
         print(db)
         deals=get_deals_results(
-            tenant_name='wiz_qa.io',
-            stack='preprod',
-            gbm_stack='gbm-qa',
-            etl_stack='etl-qa',
-            pod='dev',
-            periods=['2025Q1','2025Q2','2025Q3','2025Q4'],
+            periods=['2025Q1'],
             timestamps=[],
             get_results_from_as_of=0,
             fields=[],

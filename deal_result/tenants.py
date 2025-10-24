@@ -283,7 +283,7 @@ def fa_connection_strings(stack, tenant_name):
         password = os.environ['MONGO_PASSWORD_STAGE']
     else:
         mongo_instance = 'mongo-fmapp-qa-shard0-0.aviso.com'
-        password = os.environ['MONGO_PASSWORD_STAGE']
+        password = os.environ['MONGO_PASSWORD']
     return "mongodb://" + username + ":" + password + "@" + mongo_instance + ":27016/?tls=true"
 
 

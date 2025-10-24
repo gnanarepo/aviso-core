@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from collections import namedtuple
 import json
@@ -9,13 +10,10 @@ from aviso import settings
 from aviso.utils.dateUtils import epoch
 from aviso.settings import sec_context, gnana_db
 from urllib.parse import urlparse
-
-from pymongo import MongoClient
-
-from deal_result.tenants import ms_connection_strings
-
+from utils.cache_utils import get_mongo_client
 logger = logging.getLogger('gnana.%s' % __name__)
-
+from dotenv import load_dotenv
+load_dotenv()
 HIER_COLL = 'hierarchy'
 
 def try_float(maybe_float, default=None):
@@ -697,24 +695,36 @@ class CoolerHierarchyService(object):
             if ts is None:
                 return self.hier_with_ancestors[node] + [node]
             else:
-                # returns a generator, so we gotta do a little wonkiness, might as well
-                # make it match the same access pattern, should only return one thing though
-                anc_dict = {rec['node']: rec['ancestors'] for rec in self.fetch_ancestors(as_of=ts, nodes=[node])}
+                stack=os.environ['stack']
+                tenant_name=os.environ['tenant_name']
+                from data_load.tenants import fa_connection_strings
+                fa_connection_string = fa_connection_strings(stack, tenant_name)
+                from pymongo import MongoClient
+                client =get_mongo_client(fa_connection_string)
+                db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
+                anc_dict = {rec['node']: rec['ancestors'] for rec in self.fetch_ancestors(as_of=ts, nodes=[node],db=db)}
                 return anc_dict[node] + [node]
         except KeyError:
             # this would be a lot easier if we consolidated where we handled nulls
             return ['unmapped'] if node == 'N/A' else ['not_in_hier']
 
     def load_ancestors_from_db(self, asof):
+        stack=os.environ['stack']
+        tenant_name=os.environ['tenant_name']
+        from data_load.tenants import fa_connection_strings
+        fa_connection_string = fa_connection_strings(stack, tenant_name)
+        client = get_mongo_client(fa_connection_string)
+        db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
+        db=db
         # TODO: figure out actual timestamps
-        return {node['node']: node['ancestors'] for node in self.fetch_ancestors(asof)}#, db=db)}
+        return {node['node']: node['ancestors'] for node in self.fetch_ancestors(asof,db=db)}#, db=db)}
 
     def fetch_ancestors(self,
                         as_of,
                         nodes=None,
                         include_hidden=False,
                         include_children=False,
-                        #db=None,
+                        db=None,
                         ):
         """
         fetch ancestors of many hierarchy nodes
@@ -733,26 +743,6 @@ class CoolerHierarchyService(object):
             generator -- generator of ({node: node, parent: parent, ancestors: [ancestors]})
         """
         # hier_collection = sec_context.tenant_db[HIER_COLL]
-        pod='dev'
-        #gbm_stack = sec_context.details.get('etl_stack', 'etl-qa')
-        gbm_stack='gbm-qa'
-        # tenant_name = sec_context.details.get('tenant_name')
-        tenant_name= 'wiz_qa.io'
-        # # client = MongoClient("mongodb://mongo-fmapp-qa-shard0-0.aviso.com:27016")
-        # # tenant_db_name = tenant_name + "_db_" + gbm_stage # armis_rts_db_gbm-qa
-        # # db = client[tenant_db_name]
-        ms_connection_string = ms_connection_strings(pod)
-        logger.info('Connecting to MongoDB for %s %s', tenant_name, pod)
-        client = MongoClient(ms_connection_string, tz_aware=True)
-        tenant_base = tenant_name
-        if '.com' not in tenant_name:
-            parts = tenant_name.split('.')
-            if len(parts) > 1:
-                tenant_base = parts[0] + '-' + '-'.join(parts[1:])
-            else:
-                tenant_base = tenant_name  # fallback if no dot
-
-        db = client[tenant_base + '_db_' + gbm_stack]
         hier_collection = db[HIER_COLL]
         criteria = {'$and': [
             {'$or': [{'from': None},
