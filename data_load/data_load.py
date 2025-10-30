@@ -95,9 +95,6 @@ class DataLoad:
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
         criteria = criteria_builder.get_criteria()
-        prepared_records = sec_context.etl.uip('UIPIterator', dataset='OppDS', record_filter=criteria)
-        count = sum(1 for _ in prepared_records)
-        print(f"etl uip gave: {count} results")
         deals = list(coll.find(criteria, {'_id': 0}))
 
         print(f"got result length of deals: {len(deals)}")
