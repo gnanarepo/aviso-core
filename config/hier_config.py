@@ -7,6 +7,7 @@ from itertools import product
 
 from aviso.settings import sec_context
 
+from api.drilldown_fields_v2 import DrilldownFieldsV2
 from fake_data.fake_data import COMPANIES
 from infra.constants import HIER_COLL
 from infra.mongo_utils import create_collection_checksum
@@ -945,6 +946,7 @@ class DealBottomBuilder(DrilldownBuilder):
     def deal_field_values(self):
         deal_fields = self.config.drilldown_deal_fields[self.drilldown]
         if not self.config.dummy_tenant:
+            values = DrilldownFieldsV2()
             values = sec_context.gbm.api(
                 '/gbm/drilldown_fields?period={}&owner_mode=True&drilldown={}'.format(self.period, self.drilldown),
                 {'fields_list': [deal_fields]}) or {self.period: {}}

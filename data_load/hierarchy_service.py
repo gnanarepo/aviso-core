@@ -2,7 +2,11 @@ import logging
 import random
 
 from aviso.settings import sec_context
-from aviso.utils.dateUtils import epoch
+# Try new location first, fallback to compatibility module
+try:
+    from utils.date_utils import epoch
+except ImportError:
+    from aviso.utils.dateUtils import epoch
 from django.utils.functional import cached_property
 
 logger = logging.getLogger('gnana.%s' % __name__)
