@@ -67,3 +67,7 @@ def ip_match(ip, valid_ip_list):
         if ip in nw:
             return n
     return None
+
+
+class MicroAppView:
+    pass

@@ -8,17 +8,7 @@ from django.conf.urls.static import static
 
 # API versioning
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    
-    # API endpoints with versioning
-    path('api/v1/', include('api.v1.urls')),
-    path('api/v2/', include('api.v2.urls')),
-    
-    # Backward compatibility - old endpoint redirects to v2
-    path('api/drilldown-fields/v2/', include('api.v2.urls')),
-    
-    # Main API routing (for cleaner URLs)
-    path('api/', include('api.urls')),
+    path('', include('api.urls'))
 ]
 
 # Serve media files in development

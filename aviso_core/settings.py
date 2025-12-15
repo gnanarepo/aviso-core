@@ -12,10 +12,7 @@ from pathlib import Path
 
 # Set default environment if not set
 os.environ.setdefault('DJANGO_ENVIRONMENT', 'development')
-
-# Import from the settings package
-from .settings import *
-
+from aviso.settings import *
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -81,12 +78,12 @@ TEMPLATES = [
 WSGI_APPLICATION = 'aviso_core.wsgi.application'
 
 # Database - MongoDB is used, but Django still needs a database for sessions/auth
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -113,7 +110,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
+MEDIA_URL = '/media/'  # this must not be empty
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

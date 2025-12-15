@@ -15,3 +15,5 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aviso_core.settings')
 
 application = get_asgi_application()
 
+
+

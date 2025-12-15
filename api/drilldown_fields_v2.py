@@ -11,10 +11,11 @@ from utils import is_true
 from utils.date_utils import current_period, epoch, period_details_by_mnemonic
 from aviso.framework.views import AvisoView
 from aviso.settings import sec_context
-
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 logger = logging.getLogger("aviso-core.%s" % __name__)
 
-
+@method_decorator(csrf_exempt, name="dispatch")
 class DrilldownFieldsV2(AvisoView):
     """
     API endpoint to fetch drilldown field combinations (v2).
