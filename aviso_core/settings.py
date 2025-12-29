@@ -7,7 +7,6 @@ This file redirects to the settings package.
 """
 # Import from the new settings structure (avoid circular import)
 import os
-import sys
 from pathlib import Path
 
 # Set default environment if not set
@@ -84,6 +83,93 @@ WSGI_APPLICATION = 'aviso_core.wsgi.application'
 #         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
+
+import os
+from urllib.parse import urlparse, unquote
+
+
+def _parse_database_url(url):
+    """Parse a database URL and return a Django DATABASE dict.
+    Supports postgres/pgsql and sqlite URLs.
+    """
+    if not url:
+        return None
+    parsed = urlparse(url)
+    scheme = parsed.scheme
+    if scheme.startswith('postgres') or scheme.startswith('postgresql'):
+        # path contains the database name (with a leading '/')
+        name = parsed.path[1:] if parsed.path and parsed.path != '/' else ''
+        # If there's no database name in the URL, consider this invalid so
+        # we fall back to the default (usually a local sqlite DB).
+        if not name:
+            return None
+        user = unquote(parsed.username) if parsed.username else ''
+        password = unquote(parsed.password) if parsed.password else ''
+        host = parsed.hostname or ''
+        port = str(parsed.port) if parsed.port else ''
+        return {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': name,
+            'USER': user,
+            'PASSWORD': password,
+            'HOST': host,
+            'PORT': port,
+        }
+    elif scheme == 'sqlite' or url.endswith('.sqlite3') or url == ':memory:':
+        # sqlite: either file path or memory
+        if scheme == 'sqlite':
+            # url like sqlite:////absolute/path or sqlite:///relative/path
+            # urlparse gives path directly
+            db_path = parsed.path
+            if db_path.startswith('/'):
+                # absolute path or leading slash for file
+                name = db_path
+            else:
+                name = os.path.join(BASE_DIR, db_path)
+        else:
+            name = url
+        return {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': str(name),
+        }
+    else:
+        return None
+
+# Only set DATABASES if not provided by the imported aviso.settings or if NAME missing
+try:
+    _has_name = isinstance(DATABASES, dict) and DATABASES.get('default') and DATABASES['default'].get('NAME')
+except NameError:
+    _has_name = False
+
+if not _has_name:
+    # Prefer explicit PG_DB_CONNECTION_URL, then postgres_common_db_url, then PG_DB_CONNECTION_URL env var
+    db_url = os.environ.get('PG_DB_CONNECTION_URL') or os.environ.get('postgres_common_db_url') or os.environ.get('PG_DATABASE_URL')
+    db_settings = _parse_database_url(db_url) if db_url else None
+    if not db_settings:
+        # fallback to a local sqlite database to ensure NAME exists
+        db_settings = {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': str(BASE_DIR / 'db.sqlite3'),
+        }
+    DATABASES = {'default': db_settings}
+
+# Sanitize DATABASES: ensure every configured DB has a NAME. If a PostgreSQL entry has no
+# NAME, replace that entry with a local sqlite fallback for that alias. This avoids
+# Django raising "Please supply the NAME value" while preserving other valid settings.
+for _alias, _cfg in list(DATABASES.items()):
+    try:
+        engine = _cfg.get('ENGINE', '') if isinstance(_cfg, dict) else ''
+    except Exception:
+        engine = ''
+    if engine and ('postgres' in engine or 'postgresql' in engine):
+        name = _cfg.get('NAME') if isinstance(_cfg, dict) else None
+        if not name:
+            # Create a sqlite fallback specific to this alias so it doesn't overwrite default DB
+            fallback_path = str(BASE_DIR / f"{_alias}_fallback.sqlite3")
+            DATABASES[_alias] = {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': fallback_path,
+            }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -173,4 +259,3 @@ LOGGING = {
         },
     },
 }
-

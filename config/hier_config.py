@@ -7,7 +7,6 @@ from itertools import product
 
 from aviso.settings import sec_context
 
-from api.drilldown_fields_v2 import DrilldownFieldsV2
 from fake_data.fake_data import COMPANIES
 from infra.constants import HIER_COLL
 from infra.mongo_utils import create_collection_checksum
@@ -44,6 +43,10 @@ class DealFactory:
         self.stage_trans = [0, 60, 90]
         self.industry = ['finance', 'tech', 'poor']
         self.competitor = ['aviso', 'shittyOnes', 'nobody']
+
+    def get_drilldown_fields():
+        from api.drilldown_fields_v2 import DrilldownFieldsV2
+        return DrilldownFieldsV2
 
     def make_deals(self, count):
         deal_makers = {'c': [self.won,

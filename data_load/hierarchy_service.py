@@ -6,7 +6,7 @@ from aviso.settings import sec_context
 try:
     from utils.date_utils import epoch
 except ImportError:
-    from aviso.utils.dateUtils import epoch
+from aviso.utils.dateUtils import epoch
 from django.utils.functional import cached_property
 
 logger = logging.getLogger('gnana.%s' % __name__)

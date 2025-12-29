@@ -10,6 +10,3 @@ app_name = 'api'
 urlpatterns = [
     path('drilldown_fields_v2/', DrilldownFieldsV2.as_view(),  name='drilldown_fields_v2'),
 ]
-
-
-
