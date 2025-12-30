@@ -1,11 +1,17 @@
 from aviso.settings import sec_context
 from aviso.utils.dateUtils import TimeHorizon
 
+import json
+import logging
+import collections
 from abc import ABC, abstractmethod
 from json import loads
-import collections
-import logging
 from copy import deepcopy
+
+from django.http import JsonResponse
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.views.decorators.csrf import csrf_exempt
 from pymongo import MongoClient
 
 from data_load.tenants import ms_connection_strings
@@ -194,8 +200,6 @@ class DataLoad:
                 for x in values:
                     if not re.match(x, str(loads(data[feature]))):
                         return False
-            # if filter_type == 'range_in':
-            # if filter_type == 'range_not_in':
         return True
 
     @staticmethod
@@ -354,3 +358,73 @@ class RevenueSchedule:
             else:
                 rev_schedule_prd_date[prd] = max(rev_schedule_prd_date[prd], float(ts))
         return dict(rev_schedule_prd), rev_schedule_prd_date
+
+@method_decorator(csrf_exempt, name='dispatch')
+class DataLoadAPIView(View):
+    """
+    Django API View to trigger DataLoad and RevenueSchedule.
+    """
+
+    def post(self, request, *args, **kwargs):
+        try:
+            # 1. Parse JSON Body
+            try:
+                data = json.loads(request.body)
+            except json.JSONDecodeError:
+                return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+            # 2. Extract Fields (Manual Extraction)
+            tenant_name = data.get('tenant_name')
+            stack = data.get('stack')
+            gbm_stack = data.get('gbm_stack')
+            pod = data.get('pod')
+            etl_stack = data.get('etl_stack')
+            period = data.get('period')
+            run_type = data.get('run_type', 'chipotle')
+            id_list = data.get('id_list', [])
+            from_timestamp = data.get('from_timestamp', 0)
+            changed_fields_only = data.get('changed_fields_only', False)
+
+            # 3. Validation
+            if not all([tenant_name, stack, pod, etl_stack]):
+                 return JsonResponse(
+                     {"error": "Missing required fields (tenant_name, stack, pod, etl_stack)"},
+                     status=400
+                 )
+
+            logger.info(f"Starting API process for {tenant_name}")
+
+            # 4. Initialize DataLoad (Using class defined above)
+            loader = DataLoad(
+                id_list=id_list,
+                tenant_name=tenant_name,
+                stack=stack,
+                gbm_stack=gbm_stack,
+                pod=pod,
+                etl_stack=etl_stack,
+                period=period,
+                run_type=run_type,
+                from_timestamp=from_timestamp,
+                changed_fields_only=changed_fields_only
+            )
+
+            # 5. Get Basic Results
+            basic_results = loader.get_basic_results()
+
+            # 6. Initialize RevenueSchedule (Using class defined above)
+            scheduler = RevenueSchedule(period=period, basic_results=basic_results)
+            final_results = scheduler.revenue_schedule()
+
+            # 7. Return Response
+            return JsonResponse({
+                "status": "success",
+                "count": len(final_results) if isinstance(final_results, list) else 0,
+                "data": final_results
+            }, status=200)
+
+        except Exception as e:
+            logger.error(f"API Error: {str(e)}", exc_info=True)
+            return JsonResponse(
+                {"status": "error", "message": str(e)},
+                status=500
+            )
