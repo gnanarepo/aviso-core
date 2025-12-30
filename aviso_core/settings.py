@@ -19,20 +19,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-this-in-production-aviso-core')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+# DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+# ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 # Application definition
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
+INSTALLED_APPS += [
     'rest_framework',
-    # Local apps - organized by functionality
+
+    # Local apps
     'api',
     'config',
     'data_load',
@@ -53,26 +48,11 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'aviso_core.middleware.SecurityContextMiddleware',  # Custom middleware for security context
+    # 'aviso_core.middleware.SecurityContextMiddleware',  # Custom middleware for security context
 ]
 
 ROOT_URLCONF = 'aviso_core.urls'
 
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
 
 WSGI_APPLICATION = 'aviso_core.wsgi.application'
 
@@ -171,28 +151,6 @@ for _alias, _cfg in list(DATABASES.items()):
                 'NAME': fallback_path,
             }
 
-# Password validation
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
-
-# Internationalization
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
-USE_I18N = True
-USE_TZ = True
-
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -226,36 +184,31 @@ REST_FRAMEWORK = {
     ],
 }
 
-# MongoDB Configuration
+from django.conf import global_settings
 
-# Security Context - will be set at runtime
-sec_context = None
+# Ensure DEBUG is explicitly set from environment to avoid being overridden by an imported external `aviso.settings`.
+# Default to True for local development; allow overriding with the DEBUG env var.
+DEBUG = os.environ.get('DEBUG', os.environ.get('DJANGO_DEBUG', 'True')) == 'True'
 
-# Logging configuration
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
-    },
-    'loggers': {
-        'aviso-core': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-    },
-}
+# Also respect DJANGO_ENVIRONMENT variable: if it contains 'production', default DEBUG to False unless DEBUG env var explicitly set.
+if 'DJANGO_ENVIRONMENT' in os.environ and 'production' in os.environ.get('DJANGO_ENVIRONMENT', '').lower():
+    # Only force False if user didn't explicitly set DEBUG env var to True
+    if 'DEBUG' not in os.environ and 'DJANGO_DEBUG' not in os.environ:
+        DEBUG = False
+
+# Ensure ALLOWED_HOSTS is defined and non-empty. Prefer explicit env var, then DEBUG fallback, then Django global settings.
+if 'ALLOWED_HOSTS' in globals() and ALLOWED_HOSTS:
+    # keep existing value
+    pass
+else:
+    env_allowed = os.environ.get('ALLOWED_HOSTS')
+    if env_allowed:
+        # support comma-separated list in env var
+        ALLOWED_HOSTS = [h.strip() for h in env_allowed.split(',') if h.strip()]
+    else:
+        if DEBUG:
+            ALLOWED_HOSTS = ['*']
+        else:
+            # In production, if ALLOWED_HOSTS not provided, fall back to Django's global default (empty)
+            # This will intentionally be empty and cause Django to complain so operators must set ALLOWED_HOSTS
+            ALLOWED_HOSTS = global_settings.ALLOWED_HOSTS

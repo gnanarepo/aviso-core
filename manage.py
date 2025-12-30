@@ -40,7 +40,7 @@ def main():
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aviso_core.settings')
     os.environ.setdefault('DJANGO_ENVIRONMENT', 'development')
     # Sanitize settings early to avoid Django raising ImproperlyConfigured for missing DB names
-    _sanitize_settings_databases(os.environ.get('DJANGO_SETTINGS_MODULE'))
+    # _sanitize_settings_databases(os.environ.get('DJANGO_SETTINGS_MODULE'))
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
