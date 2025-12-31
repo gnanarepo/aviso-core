@@ -2,11 +2,8 @@ from django.http import HttpResponseBadRequest
 
 from config.fm_config import FMConfig
 from config.deal_config import DealConfig
-from infra.read import get_current_period, node_is_valid
-from infra.read import period_is_active as active_period
-from infra.read import validate_period
+from infra.read import get_current_period
 from utils.common import MicroAppView, cached_property
-
 
 class FMView(MicroAppView):
     """
@@ -40,6 +37,7 @@ def field_is_user_entered(request, config):
 
 
 def period_is_active(request, config):
+    from infra.read import period_is_active as active_period
     period = request.GET.get('period', get_current_period())
     if not active_period(period, config=None, quarter_editable=config.quarter_editable,
                          component_periods_editable=config.component_periods_editable,
@@ -51,10 +49,12 @@ def period_is_active(request, config):
 def period_is_valid(request, config):
     period = request.GET.get('period', get_current_period())
     if not validate_period(period):
+        from infra.read import validate_period
         return HttpResponseBadRequest(INVALID_PERIOD)
 
 
 def node_is_editable(request, config):
+    from infra.read import node_is_valid
     node = request.GET.get('node')
     period = request.GET.get('period', get_current_period())
     if not node_is_valid(node, period):

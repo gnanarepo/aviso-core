@@ -44,6 +44,10 @@ class DealFactory:
         self.industry = ['finance', 'tech', 'poor']
         self.competitor = ['aviso', 'shittyOnes', 'nobody']
 
+    def get_drilldown_fields():
+        from api.drilldown_fields_v2 import DrilldownFieldsV2
+        return DrilldownFieldsV2
+
     def make_deals(self, count):
         deal_makers = {'c': [self.won,
                              self.lost,
@@ -945,6 +949,7 @@ class DealBottomBuilder(DrilldownBuilder):
     def deal_field_values(self):
         deal_fields = self.config.drilldown_deal_fields[self.drilldown]
         if not self.config.dummy_tenant:
+            values = DrilldownFieldsV2()
             values = sec_context.gbm.api(
                 '/gbm/drilldown_fields?period={}&owner_mode=True&drilldown={}'.format(self.period, self.drilldown),
                 {'fields_list': [deal_fields]}) or {self.period: {}}

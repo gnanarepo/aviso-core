@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 
 from aviso.framework import tracer
 from aviso.framework.diagnostics import probe_util
-from aviso.framework.views import GnanaError
 from aviso.settings import (CNAME, DEBUG, TMP_DIR, event_context,
                             gnana_cprofile_bucket, gnana_storage,
                             log_config, node, sec_context)
@@ -91,6 +90,7 @@ def gnana_task_support(f):
             last_time = datetime.now(UTC)
 
     def new_task(user_and_tenant, *args, **options):
+        from aviso.framework.views import GnanaError
         thread_local_tags.tags = {}
         user_name = user_and_tenant[0]
         tenantname = user_and_tenant[1]
@@ -246,7 +246,6 @@ def gnana_task_support(f):
                 fn_response = fn(user_and_tenant, *args, **options)
                 """ if response is a dictionary, the the large response is stored in S3, and the key is passed around """
                 return check_response_size(fn_response, user_and_tenant, str(tracer.trace))
-
         except GnanaError as ge:
             # Do the house keeping first.  Saving error state may
             # fail too :-(
