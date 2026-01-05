@@ -6,9 +6,6 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from aviso.utils import is_none, is_true
 from deal_result.result_Utils import deals_results_by_period, deals_results_by_timestamp
-from utils.data_load_utils import get_drilldowns, get_dd_list
-from data_load.tenants import get_static_postgress_data
-from data_load.tenants import ms_connection_strings
 
 logger = logging.getLogger(__name__)
 
@@ -121,18 +118,3 @@ class DealsResultsAPIView(View):
                                                                  allow_live=allow_live,
                                                                  return_files_list=return_files_list)[timestamp])
         yield '}\n'
-
-def get_static_configs():
-    data = get_static_postgress_data()
-    common_model = data['models']['common']
-    viewgen_config = common_model['config']['viewgen_config']
-    uipfield = data['params']['general']['uipfield']
-    win_score_config = common_model['config'].get('win_score_config', {})
-
-    return viewgen_config, uipfield, win_score_config
-
-
-def get_deals_results(periods, timestamps, get_results_from_as_of, fields, node, force_uip_and_hierarchy, include_uip,
-                      allow_live, return_files_list):
-    service = DealsResultsAPIView()
-    pass

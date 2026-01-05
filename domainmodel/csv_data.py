@@ -14,64 +14,6 @@ import json
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
-
-def csv_version_decorator(f):
-    """ A decorator function that wraps the given function with the ability to execute
-        some common behaviour of different methods of csv version class """
-    fn = f
-
-    def new_func(*args, **options):
-        csv_type = options.get('csv_type', None)
-        tenant = sec_context.details
-        csv_config = tenant.get_config('csv_data', csv_type)
-        auto_promote = False
-        auto_promote_res = {}
-        if csv_config and csv_config.get('versioned', False):
-            if not sec_context.csv_version_info or sec_context.csv_version_info.get('promoted', False):
-                c_time = datetime.now()
-                snapshot_name = 'auto_version '
-                snapshot_name += c_time.strftime("%B-%d-%Y %H:%M:%S.%f")
-                ver_data = {'snapshot_name': snapshot_name,
-                            'snapshot_type': 'hourly',
-                            'partial': True}
-                ver_details = CSVVersions.create_version(ver_data)
-                peek_context = sec_context.peek_context()
-                sec_context.set_context(peek_context[0],
-                                        peek_context[1],
-                                        peek_context[2],
-                                        peek_context[3],
-                                        peek_context[4],
-                                        csv_version_info=ver_details)
-                auto_promote = True
-
-        ret_val = fn(*args, **options)
-        if auto_promote:
-            auto_promote_res = CSVVersions.promote_version()
-            snapshot = sec_context.csv_version_info.get('snapshot')
-            CSVPromotionData.load_promote_table(snapshot=snapshot)
-            peek_context = sec_context.peek_context()
-            sec_context.set_context(peek_context[0],
-                                    peek_context[1],
-                                    peek_context[2],
-                                    peek_context[3],
-                                    peek_context[4],
-                                    csv_version_info={},
-                                    override_version_info=True)
-
-            val = {}
-            if ret_val and isinstance(ret_val, dict):
-                if 'value' in ret_val:
-                    val = json.loads(ret_val.pop('value'))
-                auto_promote_res['auto_promote'] = auto_promote_res.pop('success', None)
-                if val:
-                    val.update(auto_promote_res)
-                    ret_val.update({'value': json.dumps(val)})
-                else:
-                    ret_val.update(auto_promote_res)
-        return ret_val
-
-    return new_func
-
 from domainmodel.model import Model
 class CSVData(Model):
     kind = 'domainmodel.csv_data.CSVData'

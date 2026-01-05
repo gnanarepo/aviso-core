@@ -9,19 +9,14 @@ import traceback
 import logging
 from domainmodel.datameta import UIPIterator
 from collections import defaultdict
-from tasks.fields import parse_field
+from utils.fields import parse_field
 from aviso.settings import sec_context
 import hashlib
 from collections import OrderedDict
-# from tasks.fields import get_all_parser
 
 logger = logging.getLogger('gnana.%s' % __name__)
 ''' Possible copy_option values '''
 copy_option_values = ['use_last', 'use_first', 'use_NA', 'use_Error']
-
-
-from aviso.tasks.fields import get_all_parser
-
 
 
 def build_id_source(key, config, ds):

@@ -51,10 +51,6 @@ Thumbs.db
 logs/
 *.log
 
-# Environment variables
-.env
-.env.local
-.env.*.local
 
 # Backup files
 *.backup

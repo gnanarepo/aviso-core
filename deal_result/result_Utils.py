@@ -12,9 +12,7 @@ from copy import deepcopy
 from aviso.settings import gnana_storage, CNAME
 import datetime
 from aviso.utils import dateUtils
-from pymongo import MongoClient
-from tenants import ms_connection_strings
-from deal_result.datameta import get_time_horizon,Dataset,get_result_class
+from deal_result.dataset import get_time_horizon, Dataset, get_result_class
 from deal_result.viewgen_service import CoolerViewGeneratorService
 from deal_result.splitter_service import ViewGeneratorService
 from deal_result.node_service import gimme_node_service

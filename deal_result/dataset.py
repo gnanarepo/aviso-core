@@ -23,9 +23,7 @@ import json
 import os
 import time
 import memcache
-# from analyticengine.forecast import Forecast
 from analyticengine.forecast2 import Forecast2
-# from analyticengine.forecast5 import Forecast5
 from analyticengine.unborn_base import UnbornBaseModel
 from analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
 from analyticengine.forecast2_no_ads import Forecast2_no_ds
@@ -196,8 +194,6 @@ class InboxFileEntry(Model):
 
 
 class Dataset(DSClass):
-
-
     def InboxFileEntryClass(dataset_name, inbox_name):
         class CustomerSpecificDatasetInboxClass(InboxFileEntry):
             collection_name = ".".join([dataset_name, "_uip", inbox_name])
@@ -626,39 +622,6 @@ def get_result_class(
 
     return CustomerSpecificResultClass
 
-
-
-
-
-
-
-def get_meta_info(ds_inst, model_inst_or_cls, cache_key, col_type):
-
-    # Proper name or stage name
-    res_or_stage = ds_inst.stage_used or col_type
-
-    # Set the collection name as per conventions
-    coll_name = ".".join([ds_inst.name, "%ss" % col_type,
-                          model_inst_or_cls.model_name,
-                          res_or_stage])
-    # get the number of days to retain the results past horizon date
-    days_to_retain = model_inst_or_cls.config.get("retention_days", None)
-    if(not days_to_retain):
-        tenant_details = sec_context.details
-        days_to_retain = tenant_details.get_config('results',
-                                                   'retention_days', 7)
-        days_to_retain = int(days_to_retain)
-    seconds_to_retain = days_to_retain * 24 * 3600
-
-    # Compute the cacke_key to use
-    if cache_key:
-        run_time_horizon = "custom_%s" % cache_key
-    else:
-        th = getattr(model_inst_or_cls, 'time_horizon', None)
-        run_time_horizon = None if th is None else "custom_%s" % th.encode_time_horizon()
-
-    return coll_name, seconds_to_retain, run_time_horizon
-
 def get_run_info_class(ds_inst, model_inst_or_cls, cache_key=None, exec_time=None, never_expires=False):
     """ Generate and return a class that can be used to store the rejections for
     of the model """
@@ -691,11 +654,6 @@ def get_run_info_class(ds_inst, model_inst_or_cls, cache_key=None, exec_time=Non
         expires = not never_expires
 
     return CustomerSpecificRunInfoClass
-
-
-
-
-
 
 def get_time_horizon(as_of=None, begins=None, horizon=None):
     """ This function makes a call to TimeHorizon. Later may support getting time horizon from a
