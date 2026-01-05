@@ -1,6 +1,6 @@
 import logging
 
-from utils.common import cached_property
+from ..utils.common import cached_property
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -48,7 +48,7 @@ class TopNodeService:
 
     def __init__(self, config):
         # import here due to circular stuff
-        from utils.result_utils import add_prefix
+        from ..utils.result_utils import add_prefix
         self.fields = {add_prefix(field, 'as_of_'): field for field in config['fields']}
 
     @cached_property
@@ -148,7 +148,7 @@ class BotNodeService:
     '''
 
     def __init__(self, config):
-        from utils.result_utils import add_prefix
+        from ..utils.result_utils import add_prefix
         self.fields = {add_prefix(field, 'as_of_'): field for field in config['fields']}
 
     @cached_property

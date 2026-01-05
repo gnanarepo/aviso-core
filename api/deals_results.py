@@ -5,7 +5,7 @@ from django.http.response import StreamingHttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from aviso.utils import is_none, is_true
-from deal_result.result_Utils import deals_results_by_period, deals_results_by_timestamp
+from ..deal_result.result_Utils import deals_results_by_period, deals_results_by_timestamp
 
 logger = logging.getLogger(__name__)
 

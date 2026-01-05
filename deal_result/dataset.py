@@ -10,9 +10,9 @@ from aviso.utils.dateUtils import   TimeHorizon, current_period,datetime2xl,get_
 
 from aviso.utils.dateUtils import get_quarter_from_cache_key,epoch
 
-from deal_result.results import ModelRunDetails,IndividualResult,CompressedIndividualResultModel,RevenueIndividualResult,GroupResult
-from domainmodel.model import Model
-from utils.config_utils import config_pattern_expansion
+from ..deal_result.results import ModelRunDetails,IndividualResult,CompressedIndividualResultModel,RevenueIndividualResult,GroupResult
+from ..domainmodel.model import Model
+from ..utils.config_utils import config_pattern_expansion
 from django.http.response import HttpResponseNotFound
 from aviso.domainmodel.datameta import DSClass
 import pymongo
@@ -23,10 +23,10 @@ import json
 import os
 import time
 import memcache
-from analyticengine.forecast2 import Forecast2
-from analyticengine.unborn_base import UnbornBaseModel
-from analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
-from analyticengine.forecast2_no_ads import Forecast2_no_ds
+from ..analyticengine.forecast2 import Forecast2
+from ..analyticengine.unborn_base import UnbornBaseModel
+from ..analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
+from ..analyticengine.forecast2_no_ads import Forecast2_no_ds
 
 #gnana settings may be removed later by waqas
 from aviso.framework.postgresdb import GnanaPostgresDB
@@ -93,7 +93,7 @@ FieldType = namedtuple('FieldType', [
 
 
 # --- Model Support ---
-from analyticengine.forecast5 import Forecast5
+from ..analyticengine.forecast5 import Forecast5
 model_types = {
     # 'forecast.Forecast': Forecast,
     'forecast2.Forecast2': Forecast2,
@@ -381,7 +381,7 @@ class Dataset(DSClass):
     @classmethod
     def load_configs(self, ds):
         from .dataset_maps import build_id_source
-        from domainmodel.uip_maps import build_uip_map
+        from ..domainmodel.uip_maps import build_uip_map
         for key, config in ds.maps.iteritems():
             if key.startswith('IDSource'):
                 id_source = build_id_source(key, config, ds)

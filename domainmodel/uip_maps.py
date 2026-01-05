@@ -4,18 +4,18 @@ import numpy as np
 from itertools import chain
 from aviso.settings import sec_context
 import logging
-from domainmodel.uip import get_data_handler, RevenueSchedule
-from utils import date_utils, is_true
+from ..domainmodel.uip import get_data_handler, RevenueSchedule
+from ..utils import date_utils, is_true
 from uip import MAX_CREATED_DATE
-from utils.time_series_utils import SplitsEventAggregator, LineItemEventAggregator
+from ..utils.time_series_utils import SplitsEventAggregator, LineItemEventAggregator
 import math
-from utils.misc_utils import try_float, trimsort, format_val
+from ..utils.misc_utils import try_float, trimsort, format_val
 import operator
-from utils.math_utils import excelToFloat
-from utils.date_utils import datetime2xl, epoch2xl, datetime2epoch, xl2datetime, now, epoch, get_future_bom
-from domainmodel.app import AccountEmails
-from utils import relativedelta
-from domainmodel.csv_data import CSVDataClass
+from ..utils.math_utils import excelToFloat
+from ..utils.date_utils import datetime2xl, epoch2xl, datetime2epoch, xl2datetime, now, epoch, get_future_bom
+from ..domainmodel.app import AccountEmails
+from ..utils import relativedelta
+from ..domainmodel.csv_data import CSVDataClass
 from collections import OrderedDict
 
 logger = logging.getLogger('gnana.%s' % __name__)
@@ -441,7 +441,7 @@ class AdornWithProductCategories(OneToManyDBMap):
         super(AdornWithProductCategories, self).__init__(feature, config, stage_ds)
 
     def process(self, uip_obj):
-        from domainmodel.datameta import Dataset, DatasetClass
+        from ..domainmodel.datameta import Dataset, DatasetClass
         ds_name = self.config['ds_name']
         ext_id_fld = self.config['ext_id_fld']  # usually OpportunityID
         splt_label_fld = self.config['splt_label_fld']
@@ -1566,7 +1566,7 @@ class AdornWithRevenueSchedule(OneToManyDBMap):
             return None
 
     def process(self, uip_obj):
-        from domainmodel.datameta import Dataset, DatasetClass
+        from ..domainmodel.datameta import Dataset, DatasetClass
         ds_name = self.config['ds_name']
         ext_id_fld = self.config['ext_id_fld']  # usually OpportunityID
         splt_date_fld = self.config['splt_date_fld']
@@ -2428,7 +2428,7 @@ class AdornWithFields(OneToManyDBMap):
             return None
 
     def process(self, uip_obj):
-        from domainmodel.datameta import Dataset, DatasetClass
+        from ..domainmodel.datameta import Dataset, DatasetClass
         ds_name = self.config['ds_name']
         ext_id_fld = self.config['ext_id_fld']  # usually OpportunityID
         filters = self.config.get('filters', None)
@@ -3408,7 +3408,7 @@ class CreateACVTimeline(UIPMap):
         }
 
         config.update(config)
-        from domainmodel import datameta
+        from ..domainmodel import datameta
 
         oppds = datameta.Dataset.getByNameAndStage(config['opp_dataset'], config['opp_dataset_stage'])
         OppDatasetClass = datameta.DatasetClass(oppds)
@@ -3787,7 +3787,7 @@ class AdornWithMonths(UIPMap):
         try:
             month_starts = ALL_PERIODS_CACHE[tenant_name]['month_starts']
         except:
-            from utils.date_utils import get_all_periods
+            from ..utils.date_utils import get_all_periods
             from numpy import array
             month_offset = sec_context.details.get_config('forecast', 'quarter_begins')[0]
             month_starts = array([datetime2xl(x[1])
@@ -3815,7 +3815,7 @@ class MoveDateValues(UIPMap):
             all_begins = ALL_PERIODS_CACHE[tenant_name]['all_begins']
             all_ends = ALL_PERIODS_CACHE[tenant_name]['all_ends']
         except:
-            from utils.date_utils import get_all_periods
+            from ..utils.date_utils import get_all_periods
             from numpy import array
             all_periods = array(get_all_periods('M', []))
             all_begins = array([datetime2xl(x[1]) for x in all_periods])
@@ -3863,7 +3863,7 @@ class MoveAllTimestamps(UIPMap):
             all_begins = ALL_PERIODS_CACHE[tenant_name]['all_begins']
             all_ends = ALL_PERIODS_CACHE[tenant_name]['all_ends']
         except:
-            from utils.date_utils import get_all_periods
+            from ..utils.date_utils import get_all_periods
             from numpy import array
             all_periods = array(get_all_periods('M', []))
             all_begins = array([datetime2xl(x[1]) for x in all_periods])

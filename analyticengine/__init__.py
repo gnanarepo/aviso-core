@@ -1,8 +1,8 @@
 from collections import Counter, defaultdict
 import logging
 from math import exp
-from deal_result.splitter_service import ViewGeneratorService
-from deal_result.viewgen_service import CoolerViewGeneratorService
+from ..deal_result.splitter_service import ViewGeneratorService
+from ..deal_result.viewgen_service import CoolerViewGeneratorService
 
 basestring = str
 long = int

@@ -7,7 +7,7 @@ from collections import OrderedDict, defaultdict
 from aviso.settings import sec_context
 
 from tasks.fields import parse_field
-from utils import GnanaError
+from ..utils import GnanaError
 
 logger = logging.getLogger('gnana.%s' % __name__)
 copy_option_values = ['use_last', 'use_first', 'use_NA', 'use_Error']

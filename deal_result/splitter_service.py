@@ -1,7 +1,7 @@
 import copy
-from deal_result.hierarchy_service import HierarchyService
+from ..deal_result.hierarchy_service import HierarchyService
 from aviso.framework.views import check_dimension_values
-# from deal_result.result_Utils import add_prefix
+# from ..deal_result.result_Utils import add_prefix
 from aviso.utils.misc_utils import try_float
 from django.utils.functional import cached_property
 

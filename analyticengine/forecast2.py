@@ -6,9 +6,9 @@ import math
 from aviso.framework.diagnostics import probe_util
 import math
 
-from analyticengine.forecast import Forecast
-from analyticengine.forecast2_default_config import *
-from analyticengine.NoresultException import NoResultException
+from ..analyticengine.forecast import Forecast
+from ..analyticengine.forecast2_default_config import *
+from ..analyticengine.NoresultException import NoResultException
 import numpy as np
 from aviso.utils.dateUtils import epoch
 import cython

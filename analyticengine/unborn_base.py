@@ -7,7 +7,7 @@ import re
 
 from aviso.utils import mathUtils
 from aviso.utils.dateUtils import datetime2xl, current_period
-# from analyticengine.forecast_base import ForecastBaseModel
+# from ..analyticengine.forecast_base import ForecastBaseModel
 import numpy as np
 import pandas as pd
 

@@ -634,21 +634,18 @@ class ModelRunDetails(ModelResult):
 
     def encode(self, attrs):
         if not self.code_version:
-            process = Popen(["git", "log", "-1", "--oneline", "--no-merges"], stdout=PIPE)
-            exit_code = os.waitpid(process.pid, 0)
-            output = process.communicate()[0]
-            self.code_version = output
-        attrs['code_version'] = self.code_version
-        if not self.config_version:
-            if ISPROD:
-                repopath = os.environ.get('CONFIG_REPO', '/opt/gnana/config')
-                process = Popen(["git", "log", "-1", "--oneline", "--no-merges"], cwd=repopath, stdout=PIPE)
-                exit_code = os.waitpid(process.pid, 0)
-                output = process.communicate()[0]
-                self.config_version = output
-            else:
-                self.config_version = None
-        attrs['config_version'] = self.config_version
+            try:
+                process = Popen(["git", "log", "-1", "--oneline", "--no-merges"], stdout=PIPE, stderr=PIPE)
+                output, error = process.communicate()
+
+                if process.returncode == 0:
+                    self.code_version = output
+                else:
+                    self.code_version = b'docker-build'
+
+            except Exception as e:
+                self.code_version = b'docker-build'
+
         attrs['code_version'] = self.code_version
         attrs['config'] = self.effective_config
         attrs['maps_used'] = self.maps

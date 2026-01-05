@@ -12,11 +12,11 @@ from copy import deepcopy
 from aviso.settings import gnana_storage, CNAME
 import datetime
 from aviso.utils import dateUtils
-from deal_result.dataset import get_time_horizon, Dataset, get_result_class
-from deal_result.viewgen_service import CoolerViewGeneratorService
-from deal_result.splitter_service import ViewGeneratorService
-from deal_result.node_service import gimme_node_service
-from deal_result.hierarchy_service import CoolerHierarchyService
+from ..deal_result.dataset import get_time_horizon, Dataset, get_result_class
+from ..deal_result.viewgen_service import CoolerViewGeneratorService
+from ..deal_result.splitter_service import ViewGeneratorService
+from ..deal_result.node_service import gimme_node_service
+from ..deal_result.hierarchy_service import CoolerHierarchyService
 
 logger = logging.getLogger('gnana.%s' % __name__)
 basestring = str

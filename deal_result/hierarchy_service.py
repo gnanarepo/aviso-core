@@ -8,9 +8,9 @@ import random
 from django.utils.functional import cached_property
 from aviso import settings
 from aviso.utils.dateUtils import epoch
-from aviso.settings import sec_context, gnana_db
+from aviso.settings import sec_context
 from urllib.parse import urlparse
-from utils.cache_utils import get_mongo_client
+from pymongo import MongoClient
 logger = logging.getLogger('gnana.%s' % __name__)
 from dotenv import load_dotenv
 load_dotenv()
@@ -697,10 +697,9 @@ class CoolerHierarchyService(object):
             else:
                 stack=os.environ['stack']
                 tenant_name=os.environ['tenant_name']
-                from data_load.tenants import fa_connection_strings
+                from ..data_load.tenants import fa_connection_strings
                 fa_connection_string = fa_connection_strings(stack, tenant_name)
-                from pymongo import MongoClient
-                client =get_mongo_client(fa_connection_string)
+                client = MongoClient(fa_connection_string)
                 db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
                 anc_dict = {rec['node']: rec['ancestors'] for rec in self.fetch_ancestors(as_of=ts, nodes=[node],db=db)}
                 return anc_dict[node] + [node]
@@ -711,9 +710,9 @@ class CoolerHierarchyService(object):
     def load_ancestors_from_db(self, asof):
         stack=os.environ['stack']
         tenant_name=os.environ['tenant_name']
-        from data_load.tenants import fa_connection_strings
+        from ..data_load.tenants import fa_connection_strings
         fa_connection_string = fa_connection_strings(stack, tenant_name)
-        client = get_mongo_client(fa_connection_string)
+        client = MongoClient(fa_connection_string)
         db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
         db=db
         # TODO: figure out actual timestamps

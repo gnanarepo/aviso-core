@@ -1,7 +1,7 @@
 __author__ = 'mael'
 
-from analyticengine.CombineResults import CombineResults
-from analyticengine.forecast2 import Forecast2
+from ..analyticengine.CombineResults import CombineResults
+from ..analyticengine.forecast2 import Forecast2
 
 
 class Forecast5(Forecast2):

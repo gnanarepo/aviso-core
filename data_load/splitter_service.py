@@ -1,4 +1,4 @@
-from utils.common import cached_property
+from ..utils.common import cached_property
 
 
 class CoolerSplitterService:

@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from aviso.utils.dateUtils import get_prevq_mnem
 
-from utils.date_utils import current_period, xl2datetime
+from ..utils.date_utils import current_period, xl2datetime
 
 logger = logging.getLogger('gnana.%s' % __name__)
 

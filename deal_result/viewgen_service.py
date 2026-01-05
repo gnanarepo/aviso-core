@@ -1,7 +1,7 @@
-# from deal_result.datameta import Dataset
-from deal_result.splitter_service import CoolerSplitterService
-from deal_result.hierarchy_service import CoolerHierarchyService
-from deal_result.node_service import gimme_node_service
+# from ..deal_result.datameta import Dataset
+from ..deal_result.splitter_service import CoolerSplitterService
+from ..deal_result.hierarchy_service import CoolerHierarchyService
+from ..deal_result.node_service import gimme_node_service
 from django.utils.functional import cached_property
 
 
@@ -17,7 +17,7 @@ class CoolerViewGeneratorService(object):
 
     '''
     def __init__(self, perspective=None, hier_asof=None,):
-        from deal_result.dataset import Dataset
+        from ..deal_result.dataset import Dataset
         ds = Dataset.getByNameAndStage('OppDS', None)
         self.viewgen_config = ds.models['common'].config.get('viewgen_config', {})
 

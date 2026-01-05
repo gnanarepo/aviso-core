@@ -8,9 +8,9 @@ from aviso.utils import mathUtils
 from aviso.utils.dateUtils import  epoch
 from aviso.utils.dateUtils import datetime2xl, current_period, next_period, get_all_periods, get_all_periods_array, datestr2xldate, epoch2xl
 from aviso.utils.holiday import *
-from deal_result.splitter_service import ViewGeneratorService
+from ..deal_result.splitter_service import ViewGeneratorService
 
-# from analyticengine import AnalysisModel
+# from ..analyticengine import AnalysisModel
 from .Utils import shift_date
 
 
@@ -118,7 +118,7 @@ class AnalysisModel(object):
 
         hs_impl = self.drilldown_config.get('hs_impl', 'G')
         if hs_impl == 'A':
-            from deal_result.viewgen_service import CoolerViewGeneratorService
+            from ..deal_result.viewgen_service import CoolerViewGeneratorService
             self.viewgen_svc = CoolerViewGeneratorService(hier_asof=self.time_horizon.as_ofF)
         else:
             self.viewgen_svc = ViewGeneratorService(
@@ -485,7 +485,7 @@ class ForecastBaseModel(AnalysisModel):
         return timesbegin, timesfrom, timesto
 
     def setuptimeline(self):
-        from analyticengine import get_decay_factors
+        from ..analyticengine import get_decay_factors
 
         asOfDate = self.time_horizon.as_of
         horizon_date = self.time_horizon.horizon

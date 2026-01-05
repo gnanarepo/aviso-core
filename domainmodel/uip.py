@@ -10,10 +10,10 @@ import pytz
 from aviso import settings
 from aviso.settings import sec_context, gnana_db
 
-from domainmodel.model import Model
-from tasks.fields import yyyymmdd_to_xl
-from utils import GnanaError
-from utils.date_utils import get_a_date_time_as_float_some_how, datetime2xl, epoch, xl2datetime
+from ..domainmodel.model import Model
+from ..utils.fields import yyyymmdd_to_xl
+from ..utils import GnanaError
+from ..utils.date_utils import get_a_date_time_as_float_some_how, datetime2xl, epoch, xl2datetime
 
 MAX_CREATED_DATE = 1000000
 
@@ -1261,7 +1261,7 @@ class MongoDBMemoryCache(DataHandler):
     def load_data(self):
         self.data.clear()
         ds_inst = sec_context.get_dataset_by_name_and_stage(self.ds_name, None)
-        from domainmodel.datameta import UIPIterator
+        from ..domainmodel.datameta import UIPIterator
         for rec in UIPIterator(ds_inst=ds_inst,
                                record_filter={},
                                use_local_cache=False if settings.DEBUG else True,
@@ -1323,7 +1323,7 @@ class MongoDBDirect(DataHandler):
             force_refresh=force_refresh
         )
         self.prepare_ds = prepare_ds
-        from domainmodel.datameta import Dataset, DatasetClass
+        from ..domainmodel.datameta import Dataset, DatasetClass
         self.ds_inst = Dataset.getByNameAndStage(self.ds_name)
         self.ds_class = DatasetClass(self.ds_inst)
         self.collection_name = self.ds_class.getCollectionName()
@@ -1334,7 +1334,7 @@ class MongoDBDirect(DataHandler):
             self.criteria_key = "object.values." + self.lookup_fld
 
     def __getitem__(self, k):
-        from domainmodel.datameta import UIPIterator
+        from ..domainmodel.datameta import UIPIterator
         recs = list(
             UIPIterator(
                 ds_inst=self.ds_inst,

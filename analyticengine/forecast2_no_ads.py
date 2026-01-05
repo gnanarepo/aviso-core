@@ -2,7 +2,7 @@ import logging
 
 from aviso.utils.dateUtils import epoch
 
-from  analyticengine.forecast2 import Forecast2
+from  ..analyticengine.forecast2 import Forecast2
 
 
 def cachekey2epoch(key):

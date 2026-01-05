@@ -12,13 +12,13 @@ from aviso.settings import (CNAME, DEBUG, global_cache, gnana_db, gnana_db2,
                             local_db, sec_context)
 from django.http.response import HttpResponseNotFound
 
-from domainmodel.model import Model, ModelError
-from domainmodel.uip import (InboxEntry, InboxFileEntry, PartitionData,
+from ..domainmodel.model import Model, ModelError
+from ..domainmodel.uip import (InboxEntry, InboxFileEntry, PartitionData,
                              UIPRecord)
-from utils import GnanaError, forwardmap, update_dict
-from utils.config_utils import config_pattern_expansion
-from utils.date_utils import datetime2epoch, get_a_date_time_as_float_some_how
-from utils.math_utils import excelToFloat
+from ..utils import GnanaError, forwardmap, update_dict
+from ..utils.config_utils import config_pattern_expansion
+from ..utils.date_utils import datetime2epoch, get_a_date_time_as_float_some_how
+from ..utils.math_utils import excelToFloat
 
 logger = logging.getLogger('gnana.%s' % __name__)
 

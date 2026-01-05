@@ -19,8 +19,8 @@ from aviso.settings import (POOL_PREFIX, WORKER_POOL, adhoc_task_validity,
                             taskactive_analyticengine_validity,
                             taskactive_validity, archive_task_validity)
 from celery import current_task
-from domainmodel.model import Model
-from utils import date_utils
+from ..domainmodel.model import Model
+from ..utils import date_utils
 
 logger = logging.getLogger('gnana.%s' % __name__)
 

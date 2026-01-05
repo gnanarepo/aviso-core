@@ -609,3 +609,6 @@ def cleanmmddyy(anstr):
     return str(int(a[0])) + '/' + str(int(a[1])) + '/' + str(year)
 
 datetime2xl = lambda dt: EpochClass.from_datetime(dt).as_xldate()
+
+def current_period(a_datetime=None, period_type='Q'):
+    return period_details(a_datetime, period_type, 0)

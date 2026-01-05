@@ -1,10 +1,10 @@
 import hashlib
-from utils import GnanaError
+from ..utils import GnanaError
 from aviso.settings import sec_context, gnana_db2, gnana_db, sec_context
 
 import logging
 from bson import BSON
-from utils import crypto_utils, date_utils
+from ..utils import crypto_utils, date_utils
 import re
 from random import choice
 from string import ascii_uppercase
@@ -14,7 +14,7 @@ import json
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
-from domainmodel.model import Model
+from ..domainmodel.model import Model
 class CSVData(Model):
     kind = 'domainmodel.csv_data.CSVData'
     version = 1.0

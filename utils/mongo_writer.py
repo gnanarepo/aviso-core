@@ -9,9 +9,9 @@ from infra.constants import (AUDIT_COLL, DEALS_COLL, DRILLDOWN_COLL,
 from infra.read import (fetch_ancestors, fetch_boundry,
                         fetch_closest_boundaries, fetch_descendant_ids,
                         fetch_hidden_nodes, fetch_prev_boundaries)
-from utils.date_utils import (epoch, get_prev_eod, next_period_by_epoch,
+from ..utils.date_utils import (epoch, get_prev_eod, next_period_by_epoch,
                               prev_period_by_epoch)
-from utils.misc_utils import (BootstrapError, CycleError, is_lead_service,
+from ..utils.misc_utils import (BootstrapError, CycleError, is_lead_service,
                               iter_chunks)
 
 logger = logging.getLogger('aviso-core.%s' % __name__)

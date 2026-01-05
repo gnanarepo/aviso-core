@@ -8,9 +8,9 @@ from aviso.utils.dateUtils import xl2datetime, datestr2xldate
 import cython
 
 
-from analyticengine.NoresultException import NoResultException
-from analyticengine import CombineResults
-from analyticengine.forecast_base import ForecastBaseModel
+from ..analyticengine.NoresultException import NoResultException
+from ..analyticengine import CombineResults
+from ..analyticengine.forecast_base import ForecastBaseModel
 
 
 

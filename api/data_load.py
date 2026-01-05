@@ -14,12 +14,12 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from pymongo import MongoClient
 
-from data_load.tenants import ms_connection_strings
-from domainmodel.datameta import Dataset
-from utils.date_utils import epoch, current_period, epoch2xl
-from utils.misc_utils import prune_pfx
-from utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
-from utils.data_load_utils import get_drilldowns, get_dd_list
+from ..data_load.tenants import ms_connection_strings
+from ..domainmodel.datameta import Dataset
+from ..utils.date_utils import epoch, current_period
+from ..utils.misc_utils import prune_pfx
+from ..utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
+from ..utils.data_load_utils import get_drilldowns, get_dd_list
 
 
 logger = logging.getLogger('gnana.%s' % __name__)
@@ -359,38 +359,42 @@ class RevenueSchedule:
                 rev_schedule_prd_date[prd] = max(rev_schedule_prd_date[prd], float(ts))
         return dict(rev_schedule_prd), rev_schedule_prd_date
 
+
 @method_decorator(csrf_exempt, name='dispatch')
 class DataLoadAPIView(View):
     """
-    Django API View to trigger DataLoad and RevenueSchedule.
+    Django API View to trigger DataLoad and RevenueSchedule via GET request.
     """
 
-    def post(self, request, *args, **kwargs):
+    def get(self, request, *args, **kwargs):
         try:
-            # 1. Parse JSON Body
+            tenant_name = request.GET.get('tenant_name')
+            stack = request.GET.get('stack')
+            gbm_stack = request.GET.get('gbm_stack')
+            pod = request.GET.get('pod')
+            etl_stack = request.GET.get('etl_stack')
+            period = request.GET.get('period')
+            run_type = request.GET.get('run_type', 'chipotle')
+
+            id_list_raw = request.GET.get('id_list', '')
+            if id_list_raw:
+                id_list = [x.strip() for x in id_list_raw.split(',') if x.strip()]
+            else:
+                id_list = []
+
             try:
-                data = json.loads(request.body)
-            except json.JSONDecodeError:
-                return JsonResponse({"error": "Invalid JSON"}, status=400)
+                from_timestamp = int(request.GET.get('from_timestamp', 0))
+            except ValueError:
+                from_timestamp = 0
 
-            # 2. Extract Fields (Manual Extraction)
-            tenant_name = data.get('tenant_name')
-            stack = data.get('stack')
-            gbm_stack = data.get('gbm_stack')
-            pod = data.get('pod')
-            etl_stack = data.get('etl_stack')
-            period = data.get('period')
-            run_type = data.get('run_type', 'chipotle')
-            id_list = data.get('id_list', [])
-            from_timestamp = data.get('from_timestamp', 0)
-            changed_fields_only = data.get('changed_fields_only', False)
+            changed_fields_param = request.GET.get('changed_fields_only', 'false')
+            changed_fields_only = changed_fields_param.lower() == 'true'
 
-            # 3. Validation
             if not all([tenant_name, stack, pod, etl_stack]):
-                 return JsonResponse(
-                     {"error": "Missing required fields (tenant_name, stack, pod, etl_stack)"},
-                     status=400
-                 )
+                return JsonResponse(
+                    {"error": "Missing required fields (tenant_name, stack, pod, etl_stack)"},
+                    status=400
+                )
 
             logger.info(f"Starting API process for {tenant_name}")
 

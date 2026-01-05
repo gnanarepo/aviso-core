@@ -1,6 +1,6 @@
 import logging
 from django.utils.functional import cached_property
-# from deal_result.result_Utils import add_prefix
+# from ..deal_result.result_Utils import add_prefix
 
 logger = logging.getLogger('gnana.%s' % __name__)
 

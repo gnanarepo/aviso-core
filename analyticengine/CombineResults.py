@@ -40,7 +40,7 @@ class CombineResults(object):
         ubf_res = combine_options.get('newpipeforecast', None)
 
         # TODO: this is a bit of janky way to tell which mode we're in, fix later
-        from deal_result.dataset import Dataset
+        from ..deal_result.dataset import Dataset
         ds = Dataset.getByNameAndStage('OppDS', None)
         hs_impl = ds.params['general'].get('drilldown_config', {}).get('hs_impl', 'G')
         if hs_impl == 'A':
@@ -87,7 +87,7 @@ class CombineResults(object):
         # [by_period] Still necessary, but shouldn't be called by_period anymore.
         def get_by_period_result():
             grand_result = {}
-            from deal_result.dataset import Dataset
+            from ..deal_result.dataset import Dataset
             ds = Dataset.getByNameAndStage('OppDS', None)
             bands_config = ds.models['common'].config.get('bands_config', {})
             band_hi = bands_config.get('band_hi', 90)

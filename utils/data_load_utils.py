@@ -1,6 +1,6 @@
 
 def get_drilldowns(tenant_name, stack, viewgen_config):
-    from data_load.tenants import fa_connection_strings
+    from ..data_load.tenants import fa_connection_strings
     fa_connection_string = fa_connection_strings(stack, tenant_name)
     from pymongo import MongoClient
     client = MongoClient(fa_connection_string)

@@ -3,13 +3,13 @@ Created on 22-Feb-2016
 
 @author: ravi
 '''
-from utils import GnanaError
+from ..utils import GnanaError
 import sys
 import traceback
 import logging
-from domainmodel.datameta import UIPIterator
+from ..domainmodel.datameta import UIPIterator
 from collections import defaultdict
-from utils.fields import parse_field
+from ..utils.fields import parse_field
 from aviso.settings import sec_context
 import hashlib
 from collections import OrderedDict

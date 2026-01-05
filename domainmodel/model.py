@@ -159,7 +159,7 @@ class Model:
                      returns the if of the record if the conditional write was successful, otherwise false
         """
         if getattr(self, 'read_only', None):
-            from utils import GnanaError
+            from ..utils import GnanaError
             raise GnanaError("Read only object cannot be saved!")
 
         collection_name = self.getCollectionName()
@@ -176,7 +176,7 @@ class Model:
         localattrs = {}
         prev_last_modified_time = self.last_modified_time
         try:
-            from utils import date_utils
+            from ..utils import date_utils
             self.last_modified_time = date_utils.epoch().as_epoch()
         except:
             self.last_modified_time = None
@@ -266,7 +266,7 @@ class Model:
         if self.tenant_aware and self.encrypted and sec_context.details.is_encrypted:
             encdata = sec_context.encrypt(BSON.encode(localattrs), self)
             if encdata:
-                from utils import crypto_utils
+                from ..utils import crypto_utils
                 self.encdata = encdata
                 object_doc.update({
                     "_encdata": encdata,
@@ -410,7 +410,7 @@ class Model:
         docs_to_insert = []
         for rec in rec_list:
             localattrs = {}
-            from utils import date_utils
+            from ..utils import date_utils
             rec.last_modified_time = date_utils.epoch().as_epoch()
             rec.encode(localattrs)
             localattrs.pop('last_modified_time', None)
@@ -429,7 +429,7 @@ class Model:
             if check_sum_value:
                 object_doc['check_sum'] = check_sum_value
             if is_tenant_encrypted and cls.encrypted:
-                from utils import crypto_utils
+                from ..utils import crypto_utils
                 docs_to_insert.append(crypto_utils.encrypt_record(cls.index_list, object_doc, query_fields, postgres,
                                                                   cls=cls))
             else:
@@ -529,7 +529,7 @@ class Model:
                 )
             except:
                 pass
-            from utils import diff_rec
+            from ..utils import diff_rec
             if (all_query_fields_old is None or
                     diff_rec(all_query_fields_new, all_query_fields_old['index_info'])):
                 if not all_query_fields_old:
