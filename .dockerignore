@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+*.log
+
+.git
+.gitignore
+.venv
+env/
+venv/
+
+Dockerfile
+docker-compose.yml
+
+*.egg-info/
+dist/
+build/
+
+*.coverage
+.pytest_cache/
+
+node_modules/
+
+
+# Ignore Python cache and virtual environments
+*.pyc
+.venv/
+*.egg-info
+
+# Ignore Git and IDE files
+.git/
+.idea/
+*.iml
+

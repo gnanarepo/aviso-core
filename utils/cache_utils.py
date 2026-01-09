@@ -4,15 +4,13 @@ implemented using https://code.google.com/p/memcached/wiki/NewProgrammingTricks
 """
 import hashlib
 import logging
-import telnetlib
-from collections import defaultdict
 from functools import wraps
 from inspect import stack
 from uuid import uuid4
 
 from aviso.settings import cache_con, cache_ttls, sec_context
 
-from utils.misc_utils import (get_nested, pop_nested, recursive_dict_iter,
+from utils.misc_utils import (get_nested, recursive_dict_iter,
                               set_nested, try_index)
 
 TEN_MINUTES = 60 * 10

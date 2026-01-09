@@ -2,15 +2,11 @@ import functools
 import hashlib
 import logging
 import os
-import pprint
 import time
-from subprocess import PIPE, Popen
 
 import boto
-from aviso.settings import BACKUP_CONFIG, ISPROD, sec_context
 from boto.s3.key import Key
 
-from utils import GnanaError
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
