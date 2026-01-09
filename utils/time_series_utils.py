@@ -2,7 +2,7 @@ import logging
 from collections import namedtuple, defaultdict
 import numpy as np
 
-from ..utils.misc_utils import try_float, powerset, index_of
+from utils.misc_utils import try_float, powerset, index_of
 
 logger = logging.getLogger("gnana.%s" % __name__)
 Event = namedtuple('Event', ['ts', 'event_type', 'data'])

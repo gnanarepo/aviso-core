@@ -1,4 +1,4 @@
-from ..utils.date_utils import EpochClass
+from utils.date_utils import EpochClass
 import logging
 from datetime import timedelta
 

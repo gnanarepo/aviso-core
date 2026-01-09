@@ -30,6 +30,7 @@ db_dev.sqlite3
 /staticfiles
 /static
 
+.env
 # Virtual Environment
 venv/
 env/

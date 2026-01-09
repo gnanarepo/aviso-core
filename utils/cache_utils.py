@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from aviso.settings import cache_con, cache_ttls, sec_context
 
-from ..utils.misc_utils import (get_nested, recursive_dict_iter,
+from utils.misc_utils import (get_nested, recursive_dict_iter,
                               set_nested, try_index)
 
 TEN_MINUTES = 60 * 10

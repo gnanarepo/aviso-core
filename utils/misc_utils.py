@@ -126,7 +126,7 @@ def format_val(val, fmt, c=None, ep_cache=None):
             try:
                 return ep_cache[val]
             except:
-                from ..utils.date_utils import epoch
+                from utils.date_utils import epoch
                 ret_val = datetime.strftime(epoch(try_float(val, 'N/A')).as_datetime(), '%b %d')
                 if ep_cache is not None:
                     ep_cache[val] = ret_val
@@ -135,7 +135,7 @@ def format_val(val, fmt, c=None, ep_cache=None):
             return 'N/A'
     elif fmt == 'stringDate':
         try:
-            from ..utils.date_utils import epoch
+            from utils.date_utils import epoch
             return datetime.strftime(epoch(val).as_datetime(), '%Y-%m-%d')
         except:
             return 'N/A'
@@ -416,7 +416,7 @@ def prune_pfx(fld):
 def update_rtfm_flag(td, last_exec_time=None, fastlane_sync_until=None, chipotle_last_exec_time=None, eoq_time=None, period=None, status='active'):
     t_fl = td.get_flag('molecule_status', 'rtfm')
     if last_exec_time:
-        from ..utils.date_utils import epoch
+        from utils.date_utils import epoch
         t_fl['last_execution_time'] = last_exec_time
         t_fl['ui_display_time'] = epoch().as_epoch()#Just to know when the chipotle was completed
         logger.info("UI time updated as %s" %t_fl['ui_display_time'])
@@ -512,7 +512,7 @@ def check_trace(params, trace_name='chipotle_trace', report='all_caches'):
             t.set_flag('molecule', trace_name, tracer.trace)
             break
         elif trace_name == 'daily_trace':
-            from ..utils.date_utils import epoch
+            from utils.date_utils import epoch
             as_of = epoch().as_datetime()
             as_of_date = as_of.strftime("%Y-%m-%d")
             daily_run_date = _get_daily_trace_date()
@@ -521,7 +521,7 @@ def check_trace(params, trace_name='chipotle_trace', report='all_caches'):
                 t.set_flag('molecule', trace_name, tracer.trace)
                 break
         elif trace_name == 'snapshot_trace':
-            from ..utils.date_utils import epoch
+            from utils.date_utils import epoch
             as_of = epoch().as_datetime()
             as_of_date = as_of.strftime("%Y-%m-%d")
             snapshot_trace_run_datetime = _get_snapshot_trace_datetime()
@@ -556,7 +556,7 @@ def update_trace(trace_name='chipotle_trace', trace_id=None, force_update=False)
     if t.get_flag('molecule', trace_name, 'finished') == trace_id:
         t.set_flag('molecule', trace_name, 'finished')
         if trace_name == 'snapshot_trace':
-            from ..utils.date_utils import epoch
+            from utils.date_utils import epoch
             _set_snapshot_trace_datetime(epoch().as_epoch())
 
 def describe_trend(val):
