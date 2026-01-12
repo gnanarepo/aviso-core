@@ -1,7 +1,6 @@
 amqp==5.3.1
 asgiref==3.8.1
--e git+ssh://git@github.com/gnanarepo/aviso-infrastructure.git@17c941b8fb1980183e2e468e9e08c916f9a375d5#egg=aviso
-avisosdk==1.0
+aviso @ git+https://github.com/gnanarepo/aviso-infrastructure.git@backup/standalone_packege
 billiard==4.2.1
 boto==2.49.0
 boto3==1.22.0
@@ -20,9 +19,9 @@ dj-database-url==0.5.0
 Django==5.2.9
 djangorestframework==3.16.1
 dnspython==2.7.0
-eventbus==1.0
 exceptiongroup==1.3.0
 greenlet==3.3.0
+gunicorn==20.1.0
 idna==2.10
 imbox==0.9.5
 iniconfig==2.1.0
@@ -42,7 +41,7 @@ pluggy==1.6.0
 prompt_toolkit==3.0.51
 psutil==7.0.0
 psycopg2==2.9.9
-psycopg2-binary==2.8.6
+psycopg2-binary==2.9.9
 pycparser==2.23
 pycryptodome==3.10.1
 pydevd==3.3.0

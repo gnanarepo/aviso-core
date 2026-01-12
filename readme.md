@@ -60,15 +60,13 @@ source .venv/bin/activate
 
 ```
 
-
-Then you need to first install the Aviso-infrastructure package in editable mode:
+First run this command once in the terminal to map the GitHub URLs to use SSH instead of HTTPS:
 
 ```bash
-pip install -e <path-to-aviso-infrastructure-repo>
-
+git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
 ```
 
-Now Install the remaining dependencies:
+Now Install the dependencies:
 3. **Install dependencies:**
 ```bash
 pip install -r requirements.txt

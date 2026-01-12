@@ -27,14 +27,3 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('gbm/', include('gbm_apis.urls')),
 ]
-
-aviso_apps = os.environ.get('AVISO_APPS', None)
-
-if aviso_apps is not None:
-    apps = aviso_apps.split(':')
-    for app in apps:
-        try:
-            urlpatterns += [re_path(rf'^{app}/', include(f'{app}.urls'))]
-        except Exception as e:
-            logger.exception(f"Failed IMPORT!! while loading app: {app} urls ")
-            raise

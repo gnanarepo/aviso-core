@@ -28,9 +28,12 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 if DEBUG:
     # Local development
     ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+    CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
 else:
     hosts_env = os.environ.get('ALLOWED_HOSTS', '')
     ALLOWED_HOSTS = [host.strip() for host in hosts_env.split(',') if host.strip()]
+    trusted_origins = os.environ.get('TRUSTED_ORIGINS', None).split(":")
+    CSRF_TRUSTED_ORIGINS = trusted_origins
 
 
 # Application definition

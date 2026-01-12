@@ -1,13 +1,25 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+import itertools
+if not hasattr(itertools, "izip"):
+    itertools.izip = zip
 import os
 import sys
 import zipimport
+import importlib.util
 
+pyschema_spec = importlib.util.find_spec("pyschema")
 
-# ==========================================
-# FIX: Monkey-patch zipimporter for Legacy SDK
-# ==========================================
+if pyschema_spec and pyschema_spec.submodule_search_locations:
+    pyschema_path = pyschema_spec.submodule_search_locations[0]
+    core_path = os.path.join(pyschema_path, 'core.py')
+
+    if os.path.exists(core_path):
+        spec = importlib.util.spec_from_file_location("core", core_path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["core"] = module
+        spec.loader.exec_module(module)
+
 class PatchedZipImporter(zipimport.zipimporter):
     def __init__(self, path):
         # 1. The Magic: Insert the zip path into sys.path
@@ -40,20 +52,9 @@ class PatchedZipImporter(zipimport.zipimporter):
 # Apply the patch globally
 zipimport.zipimporter = PatchedZipImporter
 
-# Fix for Python 3.10+ removing 'izip' (if your library needs it)
-import itertools
-
-if not hasattr(itertools, "izip"):
-    itertools.izip = zip
-
-
-# ==========================================
-# END FIX
-# ==========================================
-
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aviso.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aviso_core.settings')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
