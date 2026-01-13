@@ -30,6 +30,7 @@ db_dev.sqlite3
 /staticfiles
 /static
 
+.env
 # Virtual Environment
 venv/
 env/
@@ -51,10 +52,6 @@ Thumbs.db
 logs/
 *.log
 
-# Environment variables
-.env
-.env.local
-.env.*.local
 
 # Backup files
 *.backup

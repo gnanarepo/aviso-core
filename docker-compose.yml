@@ -1,17 +1,11 @@
 version: '3.8'
 
 services:
-  mongo:
-    image: mongo
-    container_name: mongo-test
+  web:
+    image: aviso-core
+    env_file:
+      - .env
     ports:
-      - "27017:27017"
-    environment:
-      # make sure to match this according to your .env file
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: pass123
-    volumes:
-      - mongo_data:/data/db
-
-volumes:
-  mongo_data:
+      - "8000:8000"
+    # Overrides the CMD in Dockerfile if you want hot-reloading for dev
+    command: gunicorn aviso_core.wsgi:application --bind 0.0.0.0:8000 --reload

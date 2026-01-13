@@ -1,46 +1,60 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+import itertools
+if not hasattr(itertools, "izip"):
+    itertools.izip = zip
 import os
 import sys
+import zipimport
+import importlib.util
+
+pyschema_spec = importlib.util.find_spec("pyschema")
+
+if pyschema_spec and pyschema_spec.submodule_search_locations:
+    pyschema_path = pyschema_spec.submodule_search_locations[0]
+    core_path = os.path.join(pyschema_path, 'core.py')
+
+    if os.path.exists(core_path):
+        spec = importlib.util.spec_from_file_location("core", core_path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["core"] = module
+        spec.loader.exec_module(module)
+
+class PatchedZipImporter(zipimport.zipimporter):
+    def __init__(self, path):
+        # 1. The Magic: Insert the zip path into sys.path
+        # This makes __import__('etl_...') work immediately by using standard PathFinder
+        if path and path not in sys.path:
+            sys.path.insert(0, path)
+            print(f"DEBUG: PatchedZipImporter added {path} to sys.path")
+
+        # 2. Call original init so the object behaves normally
+        try:
+            super().__init__(path)
+        except Exception:
+            # Fallback: Sometimes the file isn't ready, but we still want the path hook
+            pass
+
+    # 3. The Compatibility Fix: Handle Python 3.10+ argument signature
+    def find_spec(self, fullname, path=None, target=None):
+        # The legacy code adds this importer to sys.meta_path.
+        # Python 3.10 calls meta_path finders with (fullname, path, target).
+        # The original zipimporter.find_spec doesn't accept 'path', causing the TypeError.
+
+        # ACTION: We return None.
+        # REASON: By returning None, we tell Python "skip this finder".
+        # Python then moves to the default PathFinder.
+        # Since we added the zip to sys.path in __init__, the PathFinder
+        # will successfully find and import the module natively.
+        return None
 
 
-def _sanitize_settings_databases(settings_module_path=None):
-    """Import the settings module and ensure DATABASES entries have NAME when using Postgres.
-    If a Postgres entry has no NAME, switch that alias to a local sqlite fallback file.
-    """
-    try:
-        import importlib
-        import os as _os
-        if not settings_module_path:
-            settings_module_path = _os.environ.get('DJANGO_SETTINGS_MODULE')
-        if not settings_module_path:
-            return
-        mod = importlib.import_module(settings_module_path)
-        if not hasattr(mod, 'DATABASES'):
-            return
-        DBS = getattr(mod, 'DATABASES') or {}
-        base_dir = _os.path.dirname(_os.path.abspath(__file__))
-        for alias, cfg in list(DBS.items()):
-            if isinstance(cfg, dict):
-                engine = cfg.get('ENGINE', '')
-                name = cfg.get('NAME')
-                if engine and ('postgres' in engine or 'postgresql' in engine) and not name:
-                    DBS[alias] = {
-                        'ENGINE': 'django.db.backends.sqlite3',
-                        'NAME': _os.path.join(base_dir, f'{alias}_fallback.sqlite3'),
-                    }
-        setattr(mod, 'DATABASES', DBS)
-    except Exception:
-        # Keep failure silent — we don't want to break manage commands during sanitization
-        return
-
+# Apply the patch globally
+zipimport.zipimporter = PatchedZipImporter
 
 def main():
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aviso_core.settings')
-    os.environ.setdefault('DJANGO_ENVIRONMENT', 'development')
-    # Sanitize settings early to avoid Django raising ImproperlyConfigured for missing DB names
-    # _sanitize_settings_databases(os.environ.get('DJANGO_SETTINGS_MODULE'))
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
