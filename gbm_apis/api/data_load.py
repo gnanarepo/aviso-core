@@ -377,7 +377,7 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
 
     def get(self, request, *args, **kwargs):
         try:
-            tenant_name = os.environ.get('TENANT_NAME')
+            tenant_name = request.headers.get("X-Tenant-Name") or os.environ.get('TENANT_NAME')
             stack = os.environ.get('STACK')
             gbm_stack = os.environ.get('GBM_STACK')
             pod = os.environ.get('POD')
