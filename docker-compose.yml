@@ -1,11 +1,33 @@
-version: '3.8'
-
+version: "3.8"
 services:
   web:
     image: aviso-core
+    container_name: aviso-core
     env_file:
       - .env
     ports:
       - "8000:8000"
-    # Overrides the CMD in Dockerfile if you want hot-reloading for dev
     command: gunicorn aviso_core.wsgi:application --bind 0.0.0.0:8000 --reload
+    healthcheck:
+      # Ensure 'curl' is installed in your Docker image!
+      test: ["CMD", "curl", "-f", "http://localhost:8000/gbm/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        reservations: # Changed from 'requests'
+          cpus: "1"      # Minimum reserved
+          memory: 2G     # Minimum reserved
+        limits:
+          cpus: "2"      # Hard cap
+          memory: 4G     # Hard cap
+    # Restart policy
+    restart: unless-stopped
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
