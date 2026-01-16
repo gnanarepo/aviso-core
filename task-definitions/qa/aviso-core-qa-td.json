@@ -1,0 +1,57 @@
+{
+  "family": "aviso-core-qa-td",
+  "containerDefinitions": [
+    {
+      "name": "aviso-core",
+      "image": "369521641981.dkr.ecr.us-east-1.amazonaws.com/aviso-core-qa:latest",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "essential": true,
+      "command": [
+        "gunicorn",
+        "aviso_core.wsgi:application",
+        "--bind",
+        "0.0.0.0:8000"
+      ],
+      "environment": [],
+      "environmentFiles": [
+        {
+          "value": "arn:aws:s3:::dev-aviso-fargate-service-env/aviso-core-qa-env/.env",
+          "type": "s3"
+        }
+      ],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/aviso-core-qa",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "systemControls": []
+    }
+  ],
+  "taskRoleArn": "arn:aws:iam::369521641981:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::369521641981:role/ecsTaskExecutionRole",
+  "networkMode": "awsvpc",
+  "volumes": [],
+  "placementConstraints": [],
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  }
+}
