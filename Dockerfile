@@ -3,8 +3,6 @@
 # ==========================================
 FROM python:3.10-slim AS builder
 
-ARG GITHUB_TOKEN
-
 WORKDIR /build
 
 # Install build dependencies
@@ -20,8 +18,10 @@ RUN apt-get update \
 
 COPY requirements.txt .
 
-# CRITICAL: Create .netrc to authenticate HTTPS URLs automatically
-RUN echo "machine github.com login ${GITHUB_TOKEN} password x-oauth-basic" > ~/.netrc \
+# SECURE FIX: Use a secret mount instead of ARG.
+# This mounts the token only for this command, leaving no trace in the image history.
+RUN --mount=type=secret,id=github_token \
+    echo "machine github.com login $(cat /run/secrets/github_token) password x-oauth-basic" > ~/.netrc \
     && chmod 600 ~/.netrc \
     && pip install --user --no-cache-dir -r requirements.txt \
     && rm ~/.netrc
@@ -35,9 +35,13 @@ LABEL maintainer="Engineering Team <engineering@aviso.com>" \
       version="1.0.0" \
       description="Aviso Core Django Service"
 
+# Create the user first so we can use it for permissions
+RUN adduser --disabled-password --gecos '' appuser
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     AVISO_APPS=aviso_core \
+    # Update PATH so python finds the installed scripts
     PATH="/home/appuser/.local/bin:$PATH"
 
 WORKDIR /app
@@ -49,17 +53,15 @@ RUN apt-get update \
        libmemcached11 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN adduser --disabled-password --gecos '' appuser
+# FIX: Copy artifacts and change ownership immediately
+# The files in builder are owned by root (/root/.local).
+# We must chown them to appuser when copying to /home/appuser/.local
+COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 
-COPY --from=builder /root/.local /home/appuser/.local
-
-COPY . /app
-
-RUN chown -R appuser:appuser /app
+COPY --chown=appuser:appuser . /app
 
 USER appuser
 
 EXPOSE 8000
 
-# Ensure Gunicorn is installed in requirements.txt!
 CMD ["gunicorn", "aviso_core.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
