@@ -1,6 +1,6 @@
 amqp==5.3.1
 asgiref==3.8.1
-aviso @ git+https://github.com/gnanarepo/aviso-infrastructure.git@backup/standalone_packege
+aviso @ git+https://github.com/gnanarepo/aviso-infrastructure.git@master
 billiard==4.2.1
 boto==2.49.0
 boto3==1.22.0
