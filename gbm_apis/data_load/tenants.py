@@ -204,6 +204,8 @@ def tenants(tenant_name):
 
 
 def ms_connection_strings(pod):
+
+    ## IMP-- This is not working , need to fix to get working GBM-MongoDB URL
     import os
     mongo_instance = {'pod1': 'db-microservice.aviso.com',
                       'pod2': 'db-microservice-pod2.aviso.com',
@@ -224,6 +226,7 @@ def fa_connection_strings(stack, tenant_name):
     import os
     from dotenv import load_dotenv
     load_dotenv()
+     ## IMP-- This is not working , need to fix to get working GBM-MongoDB URL
     username = os.environ['MONGO_USERNAME']
     if stack == 'app':
         cluster = {'8x8.com': '2',

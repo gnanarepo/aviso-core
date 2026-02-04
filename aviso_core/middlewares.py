@@ -43,6 +43,12 @@ class SecurityContextMiddleware:
             csv_version_info={},
         )
 
+        ##Internal API-Key Validation
+        internal_api_key = request.headers.get("Internal-Api-Key")
+        if not internal_api_key or internal_api_key != os.environ.get("INTERNAL_API_KEY", ""):
+            logger.warning(f"Unauthorized access attempt to microservice by tenant: {tenant_name}")
+            return HttpResponse(content=json.dumps({"error": "Unauthorized"}), status=401, content_type="application/json")
+            
         response = self.get_response(request)
 
         if isinstance(response, dict):
