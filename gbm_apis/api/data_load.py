@@ -16,7 +16,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from pymongo import MongoClient
 
-from gbm_apis.data_load.tenants import ms_connection_strings, ms_connection_mongo_client_db
+from gbm_apis.data_load.tenants import ms_connection_strings
 from gbm_apis.domainmodel.datameta import Dataset
 from gbm_apis.framework.baseView import AvisoView
 from gbm_apis.framework.mixins import AvisoCompatibilityMixin
@@ -25,6 +25,7 @@ from utils.misc_utils import prune_pfx
 from utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
 from utils.data_load_utils import get_drilldowns, get_dd_list
 
+from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -102,7 +103,7 @@ class DataLoad:
         #db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
         cname=os.environ.get("CNAME", "preprod")
-        db = ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
+        db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
         #print(db)
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
