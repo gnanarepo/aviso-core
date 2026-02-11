@@ -1,10 +1,11 @@
+from aviso.settings import sec_context
 
 def get_drilldowns(tenant_name, stack, viewgen_config):
-    from gbm_apis.data_load.tenants import fa_connection_strings
-    fa_connection_string = fa_connection_strings(stack, tenant_name)
-    from pymongo import MongoClient
-    client = MongoClient(fa_connection_string)
-    db = client[tenant_name.split('.')[0]+'_cache_'+stack]
+    # from gbm_apis.data_load.tenants import fa_connection_strings
+    # fa_connection_string = fa_connection_strings(stack, tenant_name)
+    # from pymongo import MongoClient
+    # client = MongoClient(fa_connection_string)
+    db = sec_context.tenant_db
     coll = db['drilldowns']
     import time
     as_of = int(time.time()) * 1000

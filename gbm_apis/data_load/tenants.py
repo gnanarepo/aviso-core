@@ -1,3 +1,8 @@
+import os
+from aviso.framework.tenant_mongo_resolver import TenantMongoResolver  
+from pymongo import MongoClient, MongoReplicaSetClient
+
+
 def tenants(tenant_name):
     return {'8x8.com': {'etl_stack': 'etl-ms',
                         'gbm_db': 'gbm1_ms',
@@ -288,3 +293,33 @@ def fa_connection_strings(stack, tenant_name):
         mongo_instance = 'mongo-fmapp-qa-shard0-0.aviso.com'
         password = os.environ['MONGO_PASSWORD']
     return "mongodb://" + username + ":" + password + "@" + mongo_instance + ":27016/?tls=true"
+
+
+def ms_connection_mongo_client_db(tenant=None, db_type=None, cname=None):
+
+    if not tenant:
+        raise RuntimeError("TENANT_NAME not found in environment")
+
+    resolver = TenantMongoResolver()
+
+    # Get GBM Mongo URL (NOT client)
+    cfg = resolver.resolve(
+        tenant=tenant,
+        db_type=db_type,
+        cname=cname
+    )
+
+    if cname == "app":
+        client = MongoReplicaSetClient(
+            cfg.mongo_url,
+            unicode_decode_error_handler="ignore",
+            replicaSet=cfg.replica_set
+            )
+
+        db = client[cfg.db_name]
+    else:
+        client = MongoClient(cfg.mongo_url, unicode_decode_error_handler="ignore")
+        db = client[cfg.db_name]
+        
+    return db
+

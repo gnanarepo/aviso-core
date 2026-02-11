@@ -16,7 +16,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from pymongo import MongoClient
 
-from gbm_apis.data_load.tenants import ms_connection_strings
+from gbm_apis.data_load.tenants import ms_connection_strings, ms_connection_mongo_client_db
 from gbm_apis.domainmodel.datameta import Dataset
 from gbm_apis.framework.baseView import AvisoView
 from gbm_apis.framework.mixins import AvisoCompatibilityMixin
@@ -96,21 +96,22 @@ class DataLoad:
         uipfield = ds.params['general']['uipfield']
         record_filter = ds.get_model_filter('bookings_rtfm')
         drilldowns = get_drilldowns(self.tenant_name, self.stack, viewgen_config)
-        ms_connection_string = ms_connection_strings(self.pod)
-        print('Connecting to MongoDB for {} {}'.format(self.tenant_name, self.pod))
-        client = MongoClient(ms_connection_string)
-        db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
+        #ms_connection_string = ms_connection_strings(self.pod)
+        #print('Connecting to MongoDB for {} {}'.format(self.tenant_name, self.pod))
+        #client = MongoClient(ms_connection_string)
+        #db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
+        cname=os.environ.get("CNAME", "preprod")
+        db = ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
+        #print(db)
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
         criteria = criteria_builder.get_criteria()
         deals = list(coll.find(criteria, {'_id': 0}))
 
-        print(f"got result length of deals: {len(deals)}")
-
-        print('Fetched data from OppDS collection in MongoDB for {}'.format(sec_context.name))
-
+        logger.info(f"got result length of deals: {len(deals)}")
+        
         final_deals = []
         from_timestamp_xl = (self.from_timestamp / 1000.0) / 86400 + 25569
         for deal in deals:
@@ -377,7 +378,7 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
 
     def get(self, request, *args, **kwargs):
         try:
-            tenant_name = request.headers.get("X-Tenant-Name") or os.environ.get('TENANT_NAME')
+            tenant_name = request.headers.get("X-Tenant-Name")
             stack = os.environ.get('STACK')
             gbm_stack = os.environ.get('GBM_STACK')
             pod = os.environ.get('POD')
@@ -399,9 +400,9 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             changed_fields_param = request.GET.get('changed_fields_only', 'false')
             changed_fields_only = changed_fields_param.lower() == 'true'
 
-            if not all([tenant_name, stack, pod, etl_stack]):
+            if not all([tenant_name, stack]):
                 return JsonResponse(
-                    {"error": "Missing required fields (tenant_name, stack, pod, etl_stack)"},
+                    {"error": "Missing required fields (tenant_name, stack)"},
                     status=400
                 )
 
@@ -436,6 +437,8 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             }, status=200)
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             logger.error(f"API Error: {str(e)}", exc_info=True)
             return JsonResponse(
                 {"status": "error", "message": str(e)},

@@ -34,6 +34,16 @@ class SecurityContextMiddleware:
                 request.headers.get("X-Tenant-Name")
                 or os.environ.get("TENANT_NAME", "wiz_qa.io")
         )
+
+        if not tenant_name:
+            if os.environ.get("CNAME").lower() == "app".lower():
+                return HttpResponse(
+                    json.dumps({"error": "Missing X-Tenant-Name"}),
+                    status=400,
+                    content_type="application/json",
+                )
+            tenant_name = os.environ.get("TENANT_NAME", "wiz_qa.io")
+
         tenant_holder.set_context(
             user_name=microservices_user,
             tenant_name=tenant_name,
@@ -71,5 +81,16 @@ class SecurityContextMiddleware:
         # --- Legacy Headers (Optional but recommended) ---
         if isinstance(response, HttpResponse) and hasattr(settings, 'SDK_VERSION'):
             response['SDK_VERSION'] = settings.SDK_VERSION
+
+        # =====================================================
+        # CLEANUP PHASE
+        # =====================================================
+        try:
+            tenant_db = getattr(tenant_holder, "tenant_db", None)
+            if tenant_db:
+                tenant_db.client.close()
+                logger.info("Closed Mongo connection for tenant: %s", tenant_holder.name)
+        except Exception as e:
+            logger.warning("Failed to close Mongo connection: %s", e)
 
         return response
