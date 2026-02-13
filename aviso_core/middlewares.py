@@ -22,6 +22,7 @@ class SecurityContextMiddleware:
 
         # A. Initialize thread_local (Required by your framework)
         if not hasattr(tenant_holder, "thread_local"):
+            ##TODO ContextVar
             tenant_holder.thread_local = threading.local()
 
         # B. Reset to ensure clean state
@@ -30,19 +31,17 @@ class SecurityContextMiddleware:
         except:
             pass
 
+        ## TODO: Tenant Name Extraction From Browser
         tenant_name = (
-                request.headers.get("X-Tenant-Name")
-                or os.environ.get("TENANT_NAME", "wiz_qa.io")
+                request.headers.get("X-Tenant-Name") or request.GET.get("tenant_name", "aviso.com")
         )
 
         if not tenant_name:
-            if os.environ.get("CNAME").lower() == "app".lower():
-                return HttpResponse(
+            return HttpResponse(
                     json.dumps({"error": "Missing X-Tenant-Name"}),
                     status=400,
                     content_type="application/json",
                 )
-            tenant_name = os.environ.get("TENANT_NAME", "wiz_qa.io")
 
         tenant_holder.set_context(
             user_name=microservices_user,
@@ -54,6 +53,7 @@ class SecurityContextMiddleware:
         )
 
         ##Internal API-Key Validation
+        ##TODO: API KEY from DB Read Service ? HMAC
         internal_api_key = request.headers.get("Internal-Api-Key")
         if not internal_api_key or internal_api_key != os.environ.get("INTERNAL_API_KEY", ""):
             logger.warning(f"Unauthorized access attempt to microservice by tenant: {tenant_name}")
@@ -86,11 +86,26 @@ class SecurityContextMiddleware:
         # CLEANUP PHASE
         # =====================================================
         try:
-            tenant_db = getattr(tenant_holder, "tenant_db", None)
-            if tenant_db:
-                tenant_db.client.close()
-                logger.info("Closed Mongo connection for tenant: %s", tenant_holder.name)
+            # Close Postgres connection
+            pg_conn = getattr(tenant_holder, "postgres_local_con", None)
+
+            if pg_conn:
+                try:
+                    pg_conn.close()
+                except Exception as e:
+                    logger.info("Failed to close Postgres connection: %s", e)
+            
+            # Close Mongo connection
+            mongo_db = getattr(tenant_holder, "tenant_db", None)
+            if mongo_db:
+                try:
+                    mongo_db.client.close()
+                except Exception as e:
+                    logger.error("Failed to close Mongo connection: %s", e)
+
+            logger.info(f"Context and DB Conn cleanup completed for tenant: {tenant_name}")
+
         except Exception as e:
-            logger.warning("Failed to close Mongo connection: %s", e)
+            logger.error("Failed to clean up tenant connections: %s", e)
 
         return response
