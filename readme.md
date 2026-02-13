@@ -111,6 +111,8 @@ You should now be able to successfully hit the APIs at `http://127.0.0.1:8000/`.
 3. In Aviso-Infra Package Repo:Clone Locally, switch to changed branch and Create Wheel of AvisoInfra, get the version of wheel , add version in req.txt of aviso-core repo.
 
 4. In Wheels Folder of Aviso-Core Project, Copy the newly created wheel files after removing the existing ones.
+--> cp ../aviso-infrastructure/dist/aviso-0.1.0-py3-none-any.whl wheels/
+
 
 5. Change ENV: PG_DB_CONNECTION_URL -- replace localhost with host.docker.internal
 

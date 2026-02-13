@@ -85,27 +85,39 @@ class SecurityContextMiddleware:
         # =====================================================
         # CLEANUP PHASE
         # =====================================================
-        try:
-            # Close Postgres connection
-            pg_conn = getattr(tenant_holder, "postgres_local_con", None)
+        def cleanup():
+            try:
+                pg_conn = getattr(tenant_holder, "postgres_local_con", None)
+                if pg_conn:
+                    try:
+                        pg_conn.close()
+                    except Exception as e:
+                        logger.info("Failed to close Postgres connection: %s", e)
 
-            if pg_conn:
+                mongo_db = getattr(tenant_holder, "tenant_db", None)
+                if mongo_db:
+                    try:
+                        mongo_db.client.close()
+                    except Exception as e:
+                        logger.error("Failed to close Mongo connection: %s", e)
+
+                logger.info(f"Context and DB Conn cleanup completed for tenant: {tenant_name}")
+
+            except Exception as e:
+                logger.error("Failed to clean up tenant connections: %s", e)
+        
+        if getattr(response, "streaming", False):
+            original_stream = response.streaming_content
+
+            def wrapped_stream():
                 try:
-                    pg_conn.close()
-                except Exception as e:
-                    logger.info("Failed to close Postgres connection: %s", e)
-            
-            # Close Mongo connection
-            mongo_db = getattr(tenant_holder, "tenant_db", None)
-            if mongo_db:
-                try:
-                    mongo_db.client.close()
-                except Exception as e:
-                    logger.error("Failed to close Mongo connection: %s", e)
+                    for chunk in original_stream:
+                        yield chunk
+                finally:
+                    cleanup()
 
-            logger.info(f"Context and DB Conn cleanup completed for tenant: {tenant_name}")
-
-        except Exception as e:
-            logger.error("Failed to clean up tenant connections: %s", e)
+            response.streaming_content = wrapped_stream()
+        else:
+            cleanup()
 
         return response
