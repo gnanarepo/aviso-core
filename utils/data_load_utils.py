@@ -84,11 +84,15 @@ def get_dd_list(viewgen_config, values, drilldowns, prune_prefix):
                         middle = '||'.join(middle)
                         leaf_val = pivot + '#' + middle + '#' + leaf
                         # Uses .get with explicit default list to prevent KeyError
-                        curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '##not_in_hier', []))
+                        #curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '##not_in_hier', []))
+                        curr_drilldowns = drilldowns.get(leaf_val, [pivot + '##unmapped', pivot + '##!']
+                                                 if val == 'N/A' else drilldowns.get(pivot + '##not_in_hier', []))
                     else:
                         leaf_val = pivot + '#' + leaf
                         # Uses .get with explicit default list to prevent KeyError
-                        curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '#not_in_hier', []))
+                        #curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '#not_in_hier', []))
+                        curr_drilldowns = drilldowns.get(leaf_val, [pivot + '#unmapped', pivot + '#!']
+                                                 if val == 'N/A' else drilldowns.get(pivot + '#not_in_hier', []))
 
                     # Update main drilldown list
                     for drilldown in curr_drilldowns:
@@ -157,10 +161,14 @@ def get_dd_list(viewgen_config, values, drilldowns, prune_prefix):
                     middle.append(field + '|' + fld_val)
                 middle = '||'.join(middle)
                 leaf_val = pivot + '#' + middle + '#' + val
-                curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '##not_in_hier', []))
+                #curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '##not_in_hier', []))
+                curr_drilldowns = drilldowns.get(leaf_val, [pivot + '##unmapped', pivot + '##!']
+                                                 if val == 'N/A' else drilldowns.get(pivot + '##not_in_hier', []))
             else:
                 leaf_val = pivot + '#' + val
-                curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '#not_in_hier', []))
+                #curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '#not_in_hier', []))
+                curr_drilldowns = drilldowns.get(leaf_val, [pivot + '#unmapped', pivot + '#!']
+                                                 if val == 'N/A' else drilldowns.get(pivot + '#not_in_hier', []))
 
             for drilldown in curr_drilldowns:
                 if drilldown not in drilldown_list:

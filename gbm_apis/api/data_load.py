@@ -89,6 +89,7 @@ class DataLoad:
         ds = Dataset.getByNameAndStage('OppDS', None)
         use_core_show = ds.models['common'].config.get('fastlane_config', {}).get('use_core_show')
         viewgen_config = ds.models['common'].config.get('viewgen_config', {})
+        primary_amount_field = ds.models['common'].config.get('fastlane_config', {}).get('primary_amount_field', 'as_of_Amount_USD')
 
         th = TimeHorizon()
         boq = epoch(th.beginsF).as_xldate()
@@ -142,9 +143,10 @@ class DataLoad:
                         temp[fld] = loads(value)
                     except:
                         temp[fld] = value
-            print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+
+            #print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
             drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
-            print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+            #print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
             temp['__segs'] = drilldown_list
             if split_fields:
                 for fld, val in split_fields.items():
@@ -158,6 +160,17 @@ class DataLoad:
                     temp['win_prob'] = 1
                 case 'L':
                     temp['win_prob'] = 0
+
+            ## active_amount Handling
+            amount_fld = {'W': 'won_amount',
+                              'L': 'lost_amount'}.get(temp['terminal_fate'], 'active_amount')
+            if type(temp[primary_amount_field]) == dict:
+                temp[amount_fld] = temp[primary_amount_field]
+            else:
+                temp[amount_fld] = {}
+                for node in temp['__segs']:
+                    temp[amount_fld][node] = temp[primary_amount_field]
+
             final_deals.append(temp)
 
         return final_deals
@@ -431,11 +444,7 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             final_results = scheduler.revenue_schedule()
 
             # 7. Return Response
-            return JsonResponse({
-                "status": "success",
-                "count": len(final_results) if isinstance(final_results, list) else 0,
-                "data": final_results
-            }, status=200)
+            return JsonResponse(final_results, safe=False, status=200)
 
         except Exception as e:
             import traceback
