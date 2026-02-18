@@ -60,4 +60,4 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["gunicorn", "aviso_core.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "240"]
+CMD ["gunicorn", "aviso_core.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "240"]
