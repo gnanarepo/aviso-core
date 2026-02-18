@@ -6,6 +6,9 @@ from gbm_apis.api.health import HealthCheckView
 
 app_name = 'gbm_apis'
 
+
+## TODO: Health Check Implementation
+## TODO: TraceId Propagation- Middleware
 urlpatterns = [
     path('v2/drilldown_fields/', DrilldownFieldsV2.as_view(), name='drilldown_fields_v2'),
     path('basic_results/', DataLoadAPIView.as_view(), name='basic_results'),

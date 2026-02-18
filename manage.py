@@ -7,6 +7,9 @@ import os
 import sys
 import zipimport
 import importlib.util
+from dotenv import load_dotenv
+
+load_dotenv()
 
 pyschema_spec = importlib.util.find_spec("pyschema")
 

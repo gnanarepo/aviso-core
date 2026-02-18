@@ -25,6 +25,7 @@ from utils.misc_utils import prune_pfx
 from utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
 from utils.data_load_utils import get_drilldowns, get_dd_list
 
+from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -88,6 +89,7 @@ class DataLoad:
         ds = Dataset.getByNameAndStage('OppDS', None)
         use_core_show = ds.models['common'].config.get('fastlane_config', {}).get('use_core_show')
         viewgen_config = ds.models['common'].config.get('viewgen_config', {})
+        primary_amount_field = ds.models['common'].config.get('fastlane_config', {}).get('primary_amount_field', 'as_of_Amount_USD')
 
         th = TimeHorizon()
         boq = epoch(th.beginsF).as_xldate()
@@ -96,21 +98,22 @@ class DataLoad:
         uipfield = ds.params['general']['uipfield']
         record_filter = ds.get_model_filter('bookings_rtfm')
         drilldowns = get_drilldowns(self.tenant_name, self.stack, viewgen_config)
-        ms_connection_string = ms_connection_strings(self.pod)
-        print('Connecting to MongoDB for {} {}'.format(self.tenant_name, self.pod))
-        client = MongoClient(ms_connection_string)
-        db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
+        #ms_connection_string = ms_connection_strings(self.pod)
+        #print('Connecting to MongoDB for {} {}'.format(self.tenant_name, self.pod))
+        #client = MongoClient(ms_connection_string)
+        #db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
+        cname=os.environ.get("CNAME", "preprod")
+        db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
+        #print(db)
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
         criteria = criteria_builder.get_criteria()
         deals = list(coll.find(criteria, {'_id': 0}))
 
-        print(f"got result length of deals: {len(deals)}")
-
-        print('Fetched data from OppDS collection in MongoDB for {}'.format(sec_context.name))
-
+        logger.info(f"got result length of deals: {len(deals)}")
+        
         final_deals = []
         from_timestamp_xl = (self.from_timestamp / 1000.0) / 86400 + 25569
         for deal in deals:
@@ -140,9 +143,10 @@ class DataLoad:
                         temp[fld] = loads(value)
                     except:
                         temp[fld] = value
-            print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+
+            #print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
             drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
-            print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+            #print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
             temp['__segs'] = drilldown_list
             if split_fields:
                 for fld, val in split_fields.items():
@@ -156,6 +160,17 @@ class DataLoad:
                     temp['win_prob'] = 1
                 case 'L':
                     temp['win_prob'] = 0
+
+            ## active_amount Handling
+            amount_fld = {'W': 'won_amount',
+                              'L': 'lost_amount'}.get(temp['terminal_fate'], 'active_amount')
+            if type(temp[primary_amount_field]) == dict:
+                temp[amount_fld] = temp[primary_amount_field]
+            else:
+                temp[amount_fld] = {}
+                for node in temp['__segs']:
+                    temp[amount_fld][node] = temp[primary_amount_field]
+
             final_deals.append(temp)
 
         return final_deals
@@ -377,7 +392,7 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
 
     def get(self, request, *args, **kwargs):
         try:
-            tenant_name = request.headers.get("X-Tenant-Name") or os.environ.get('TENANT_NAME')
+            tenant_name = request.headers.get("X-Tenant-Name")
             stack = os.environ.get('STACK')
             gbm_stack = os.environ.get('GBM_STACK')
             pod = os.environ.get('POD')
@@ -399,9 +414,9 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             changed_fields_param = request.GET.get('changed_fields_only', 'false')
             changed_fields_only = changed_fields_param.lower() == 'true'
 
-            if not all([tenant_name, stack, pod, etl_stack]):
+            if not all([tenant_name, stack]):
                 return JsonResponse(
-                    {"error": "Missing required fields (tenant_name, stack, pod, etl_stack)"},
+                    {"error": "Missing required fields (tenant_name, stack)"},
                     status=400
                 )
 
@@ -429,13 +444,11 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             final_results = scheduler.revenue_schedule()
 
             # 7. Return Response
-            return JsonResponse({
-                "status": "success",
-                "count": len(final_results) if isinstance(final_results, list) else 0,
-                "data": final_results
-            }, status=200)
+            return JsonResponse(final_results, safe=False, status=200)
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             logger.error(f"API Error: {str(e)}", exc_info=True)
             return JsonResponse(
                 {"status": "error", "message": str(e)},

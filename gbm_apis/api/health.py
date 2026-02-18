@@ -25,6 +25,7 @@ class HealthCheckView(View):
             }
 
             try:
+                ## TODO Mongo HEalth CHeck
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT 1")
                 health_status["checks"]["database"] = "ok"

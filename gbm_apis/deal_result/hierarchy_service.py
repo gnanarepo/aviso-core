@@ -695,12 +695,13 @@ class CoolerHierarchyService(object):
             if ts is None:
                 return self.hier_with_ancestors[node] + [node]
             else:
-                stack=os.environ['stack']
-                tenant_name=os.environ['tenant_name']
-                from ..data_load.tenants import fa_connection_strings
-                fa_connection_string = fa_connection_strings(stack, tenant_name)
-                client = MongoClient(fa_connection_string)
-                db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
+                stack=os.environ['STACK']
+                tenant_name=sec_context.name
+                # from ..data_load.tenants import fa_connection_strings
+                # fa_connection_string = fa_connection_strings(stack, tenant_name)
+                # client = MongoClient(fa_connection_string)
+                # db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
+                db = sec_context.tenant_db
                 anc_dict = {rec['node']: rec['ancestors'] for rec in self.fetch_ancestors(as_of=ts, nodes=[node],db=db)}
                 return anc_dict[node] + [node]
         except KeyError:
@@ -708,13 +709,13 @@ class CoolerHierarchyService(object):
             return ['unmapped'] if node == 'N/A' else ['not_in_hier']
 
     def load_ancestors_from_db(self, asof):
-        stack=os.environ['stack']
-        tenant_name=os.environ['tenant_name']
-        from ..data_load.tenants import fa_connection_strings
-        fa_connection_string = fa_connection_strings(stack, tenant_name)
-        client = MongoClient(fa_connection_string)
-        db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
-        db=db
+        stack=os.environ['STACK']
+        tenant_name=sec_context.name
+        #from ..data_load.tenants import fa_connection_strings
+        #fa_connection_string = fa_connection_strings(stack, tenant_name)
+        #client = MongoClient(fa_connection_string)
+        #db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
+        db = sec_context.tenant_db
         # TODO: figure out actual timestamps
         return {node['node']: node['ancestors'] for node in self.fetch_ancestors(asof,db=db)}#, db=db)}
 

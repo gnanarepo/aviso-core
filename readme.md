@@ -93,3 +93,29 @@ You should now be able to successfully hit the APIs at `http://127.0.0.1:8000/`.
 * **MongoDB Connection Error:** Ensure your VPN is connected.
 * **Postgres Connection Error:** Verify that the SSH tunnel command is running in the background and that port `5502` is available locally.
 * Sometimes you'll need to rerun the ssh tunnel command if the connection drops. or you get error like is it accepting TCP connections.
+
+
+### Docker Deployment and Run Locally Via Docker
+
+*** Create Wheel Commands:
+--> python3 -m venv .venv 
+--> source .venv/bin/activate
+--> pip install build 
+--> python -m build
+--> Check dist folder to check the version of wheel created 
+
+1. EventBus Package Repo :Clone Locally, changed branch and Create Wheel of EventBus, get the version of wheel and add in project.toml of aviso-infra repo, eg: "eventbus==1.0"
+
+2. AvisoSDK Package Repo: Clone Locally, switch to changed branch and Create Wheel of AvisoSDK, get the version of wheel and add in project.toml of aviso-infra repo, eg: "avisosdk==1.0.0"
+
+3. In Aviso-Infra Package Repo:Clone Locally, switch to changed branch and Create Wheel of AvisoInfra, get the version of wheel , add version in req.txt of aviso-core repo.
+
+4. In Wheels Folder of Aviso-Core Project, Copy the newly created wheel files after removing the existing ones.
+--> cp ../aviso-infrastructure/dist/aviso-0.1.0-py3-none-any.whl wheels/
+
+
+5. Change ENV: PG_DB_CONNECTION_URL -- replace localhost with host.docker.internal
+
+6. Builder Docker Image :  docker build --no-cache -t aviso-core .
+
+7. Run Docker Locally: docker run --env-file .env -p 8000:8000 aviso-core 
