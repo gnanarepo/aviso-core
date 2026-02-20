@@ -31,6 +31,9 @@ class SecurityContextMiddleware:
         except:
             pass
 
+        logger.info(f"All Headers: {dict(request.headers)}")
+
+
         ## TODO: Tenant Name Extraction From Browser
         tenant_name = (
                 request.headers.get("X-Tenant-Name") or request.GET.get("tenant_name", "aviso.com")
