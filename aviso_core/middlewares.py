@@ -16,6 +16,9 @@ class SecurityContextMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if request.path.rstrip("/") == "/gbm/health":
+            return self.get_response(request)
+    
         # ===========================================================
         # 1. REQUEST PHASE: Initialize Context
         # ===========================================================
