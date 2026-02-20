@@ -25,16 +25,10 @@ SECRET_KEY = 'django-insecure-1b=+=%i&v#ppg*cm)4gxo*88z)k*$4&wk^-%t7m%b=t3-=9&0e
 
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 # --- LOGIC FOR ALLOWED HOSTS ---
-if DEBUG:
-    # Local development
-    ALLOWED_HOSTS = ['*']
-    CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
-else:
-    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
-    trusted_origins = os.environ.get('TRUSTED_ORIGINS', '').split(',')
-    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in trusted_origins if origin.strip()]
 
-# Application definition
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
+trusted_origins = os.environ.get('TRUSTED_ORIGINS', '').split(',')
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in trusted_origins if origin.strip()]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
