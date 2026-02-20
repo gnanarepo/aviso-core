@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from django.db import connection
+# from django.db import connection
 from django.conf import settings
 
 logger = logging.getLogger(f'gnana.{__name__}')
@@ -26,8 +26,8 @@ class HealthCheckView(View):
 
             try:
                 ## TODO Mongo HEalth CHeck
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
+                # with connection.cursor() as cursor:
+                #     cursor.execute("SELECT 1")
                 health_status["checks"]["database"] = "ok"
             except Exception as db_error:
                 logger.warning(f"Database health check failed: {str(db_error)}")

@@ -25,16 +25,10 @@ SECRET_KEY = 'django-insecure-1b=+=%i&v#ppg*cm)4gxo*88z)k*$4&wk^-%t7m%b=t3-=9&0e
 
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 # --- LOGIC FOR ALLOWED HOSTS ---
-if DEBUG:
-    # Local development
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
-    CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
-else:
-    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
-    trusted_origins = os.environ.get('TRUSTED_ORIGINS', '').split(',')
-    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in trusted_origins if origin.strip()]
 
-# Application definition
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
+trusted_origins = os.environ.get('TRUSTED_ORIGINS', '').split(',')
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in trusted_origins if origin.strip()]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -87,6 +81,26 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+
+# if DEBUG:
+#     DATABASES = {
+#         "default": {
+#             "ENGINE": "django.db.backends.sqlite3",
+#             "NAME": BASE_DIR / "db.sqlite3",
+#         }
+#     }
+# else:
+#     DATABASES = {
+#         "default": {
+#             "ENGINE": "django.db.backends.postgresql",
+#             "NAME": os.environ.get("DB_NAME"),
+#             "USER": os.environ.get("DB_USER"),
+#             "PASSWORD": os.environ.get("DB_PASSWORD"),
+#             "HOST": os.environ.get("DB_HOST"),
+#             "PORT": os.environ.get("DB_PORT", "5432"),
+#         }
+#     }
 
 
 # Password validation
