@@ -27,7 +27,7 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 # --- LOGIC FOR ALLOWED HOSTS ---
 if DEBUG:
     # Local development
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+    ALLOWED_HOSTS = ['*']
     CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
 else:
     ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
