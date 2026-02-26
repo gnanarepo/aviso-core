@@ -328,11 +328,11 @@ def generate_subscription_recs(rev_period, drilldown, close_date_fld, results):
 
 
 def generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld, expiration_date_fld, type_fld,
-                                         renewal_vals, opp_id, res):
+                                         renewal_vals, opp_id, res, splitted_fields):
     ret_val = {}
     dict_flds = ['eACV', 'won_amount', 'lost_amount', 'active_amount', 'forecast',
                  'existing_pipe_active_amount', 'existing_pipe_won_amount', 'existing_pipe_lost_amount',
-                 'new_pipe_active_amount', 'new_pipe_won_amount', 'new_pipe_lost_amount']
+                 'new_pipe_active_amount', 'new_pipe_won_amount', 'new_pipe_lost_amount'] + splitted_fields
 
     deal_type = res.get(type_fld, 'N/A')
     try:
@@ -360,6 +360,7 @@ def generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_da
                     if not element.startswith(renewal_drilldown + '#'):
                         del (ret_val[dummy_id][fld][element])
         ret_val[dummy_id][close_date_fld] = res.get(expiration_date_fld, 0.0)
+        ret_val[dummy_id]['__dummy_deal_rec'] = True
 
     return ret_val
 
