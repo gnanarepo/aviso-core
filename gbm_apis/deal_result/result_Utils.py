@@ -268,11 +268,11 @@ def generate_subscription_same_dd_single_rec(rev_period, drilldown, close_date_f
 
 
 
-def generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld, expiration_date_fld, type_fld, renewal_vals, opp_id, res):
+def generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld, expiration_date_fld, type_fld, renewal_vals, opp_id, res, splitted_fields):
     ret_val = {}
     dict_flds = ['eACV', 'won_amount', 'lost_amount', 'active_amount', 'forecast',
                  'existing_pipe_active_amount', 'existing_pipe_won_amount', 'existing_pipe_lost_amount',
-                 'new_pipe_active_amount', 'new_pipe_won_amount', 'new_pipe_lost_amount']
+                 'new_pipe_active_amount', 'new_pipe_won_amount', 'new_pipe_lost_amount'] + splitted_fields
 
     deal_type = res.get(type_fld, 'N/A')
     try:
@@ -298,6 +298,7 @@ def generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_da
                     if not element.startswith(renewal_drilldown + '#'):
                         del(ret_val[dummy_id][fld][element])
         ret_val[dummy_id][close_date_fld] = res.get(expiration_date_fld, 0.0)
+        ret_val[dummy_id]['__dummy_deal_rec'] = True
 
     return ret_val
 
@@ -1313,6 +1314,18 @@ def get_individual_results_generator(
         expiration_date_fld = rev_schedule_config.get('expiration_date_fld', 'ExpirationDate')
         type_fld = rev_schedule_config.get('type_fld', 'Type')
         renewal_vals = rev_schedule_config.get('renewal_vals', ['Renewal'])
+        
+        ##Druva Splits
+        viewgen_config = ds_inst.models['common'].config.get('viewgen_config', {})
+        splitted_fields = []
+        if viewgen_config['split_config']:
+            split_config = viewgen_config['split_config'][list(viewgen_config['split_config'])[0]]
+            for _, dtls in split_config.items():
+                if type(dtls) != list:
+                    dtls = [dtls]
+                for element in dtls:
+                    splitted_fields += element['num_fields']
+                    
     if rev_schedule_config.get('prd_rev_schedule', False) and rev_schedule_config.get('github_metered_billing', False):
         renewal_drilldown = rev_schedule_config.get('renewal_drilldown', 'Renewal')
         close_date_fld = rev_schedule_config.get('close_date_fld', 'CloseDate')
@@ -1366,7 +1379,14 @@ def get_individual_results_generator(
                 else:
                     yield (extid, output)
         elif rev_schedule_config.get('prd_rev_schedule', False) and rev_schedule_config.get('expiration_date_renewals_rec', False):
-            output_dict = generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld, expiration_date_fld, type_fld, renewal_vals, extid, output)
+            output_dict = generate_expiration_date_renewal_rec(rev_period, 
+                                                               renewal_drilldown, 
+                                                               close_date_fld, 
+                                                               expiration_date_fld, 
+                                                               type_fld, 
+                                                               renewal_vals, 
+                                                               extid, output, 
+                                                               splitted_fields)
             for extid, output in output_dict.items():
                 if custom_fields:
                     yield (extid, {key: output[key] for key in custom_fields if key in output})

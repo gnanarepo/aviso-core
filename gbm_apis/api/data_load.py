@@ -320,12 +320,23 @@ class RevenueSchedule:
                 expiration_date_fld = rev_schedule_config.get('expiration_date_fld', 'ExpirationDate')
                 type_fld = rev_schedule_config.get('type_fld', 'Type')
                 renewal_vals = rev_schedule_config.get('renewal_vals', ['Renewal'])
+
+                viewgen_config = oppds.models['common'].config.get('viewgen_config', {})
+                splitted_fields = []
+                if viewgen_config['split_config']:
+                    split_config = viewgen_config['split_config'][list(viewgen_config['split_config'])[0]]
+                    for _, dtls in split_config.items():
+                        if type(dtls) != list:
+                            dtls = [dtls]
+                        for element in dtls:
+                            splitted_fields += element['num_fields']
+                
                 basic_results_dict_copy = deepcopy(basic_results_dict)
                 basic_results_dict = {}
                 for opp_id, res in basic_results_dict_copy.items():
                     output_dict = generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld,
                                                                        expiration_date_fld, type_fld, renewal_vals,
-                                                                       opp_id, res)
+                                                                       opp_id, res, splitted_fields)
                     basic_results_dict.update(output_dict)
             else:
                 basic_results_dict = generate_revenue_recs(rev_period, drilldown, close_date_fld, basic_results_dict)

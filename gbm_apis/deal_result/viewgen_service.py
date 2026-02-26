@@ -186,6 +186,8 @@ class CoolerViewGeneratorService(object):
             final_dict = self.resolve_splits(split_dict, split_info, node_segs)
 
             for field, field_dict in final_dict.items():
+                if field not in update_dict:
+                    update_dict[field] = {}
                 for node, val in field_dict.items():
                     update_dict[field][node] = val
         # update
@@ -208,6 +210,18 @@ class CoolerViewGeneratorService(object):
                     output[field][node] = self.try_add(output[field], split_dict[field], split_id, node)
                 for field in str_fields:
                     output[field][node] = self.try_concat(output[field], split_dict[field], split_id, node)
+
+                    ratio_key = field + '_ratios'
+                    if ratio_key not in output:
+                        output[ratio_key] = {}
+                    if node not in output[ratio_key]:
+                        output[ratio_key][node] = {}
+                    ratio_val = split_dict[ratio_key].get(split_id)
+                    if ratio_val is not None:
+                        split_name = split_dict[field].get(split_id, split_id)
+                        current_val = output[ratio_key][node].get(split_name, 0.0)
+                        output[ratio_key][node][split_name] = current_val + ratio_val
+                    
         return output
 
     def try_add(self, out_dict, split_vals, split_id, node):
