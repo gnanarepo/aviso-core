@@ -104,6 +104,14 @@ You should now be able to successfully hit the APIs at `http://127.0.0.1:8000/`.
 --> python -m build
 --> Check dist folder to check the version of wheel created 
 
+*** Update Wheels (After Code Changes in Aviso-Infra)
+--> bump version in project.toml (version = "0.1.1" <->"0.1.2")
+--> rm -rf build dist *.egg-info
+--> python -m build
+--> Copy the newly created wheels in /wheels folder and move the old<>last wheel to wheels_backup folder
+--> cp ../aviso-infrastructure/dist/aviso-0.1.2-py3-none-any.whl wheels 
+--> mv wheels/aviso-0.1.1-py3-none-any.whl wheels_backup/
+
 1. EventBus Package Repo :Clone Locally, changed branch and Create Wheel of EventBus, get the version of wheel and add in project.toml of aviso-infra repo, eg: "eventbus==1.0"
 
 2. AvisoSDK Package Repo: Clone Locally, switch to changed branch and Create Wheel of AvisoSDK, get the version of wheel and add in project.toml of aviso-infra repo, eg: "avisosdk==1.0.0"

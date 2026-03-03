@@ -4,7 +4,7 @@ from aviso.utils.misc_utils import try_float
 from django.http.response import (HttpResponseNotFound)
 from django.http.request import QueryDict
 import traceback
-import sys
+import sys, os
 from aviso.settings import sec_context,gnana_db
 import logging
 from aviso.utils import GnanaError
@@ -17,6 +17,9 @@ from ..deal_result.viewgen_service import CoolerViewGeneratorService
 from ..deal_result.splitter_service import ViewGeneratorService
 from ..deal_result.node_service import gimme_node_service
 from ..deal_result.hierarchy_service import CoolerHierarchyService
+
+from aviso.framework.tenant_mongo_resolver import TenantMongoResolver 
+
 
 logger = logging.getLogger('gnana.%s' % __name__)
 basestring = str
@@ -1657,6 +1660,11 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
     results = {}
     new_file_name_results = {}
     buffer_time = 3 * 60 * 60 * 1000
+    
+    cname=os.environ.get("CNAME", "preprod")
+    resolver = TenantMongoResolver()
+    cfg = resolver.resolve(sec_context.name, cname=cname, db_type="gbm")
+
     for period in periods:
         results[period] = {}
         qperiod, mperiod, is_curr_q = janky_period_parser(period)
@@ -1665,7 +1673,7 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
         year, month, day = datetime.datetime.fromtimestamp(get_results_from_as_of / 1000,
                                                            tz=datetime.timezone.utc).strftime("%Y,%m,%d").split(",")
         if return_files_list:
-            file_name = '/'.join([sec_context.name, CNAME, ck])
+            file_name = '/'.join([sec_context.name, cfg.stack, ck])
 
             counter = 0
             if gnana_storage.if_exists(file_name + '_' + str(counter) + '.csv', 'daily-results'):
@@ -1709,7 +1717,7 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
             file_name_new = "/".join(
                 ["chipotle-results", sec_context.name, year, month, day, f'chipotle_{get_results_from_as_of}']) + '.json'
         else:
-            file_name_new = '/'.join([sec_context.name, CNAME, ck]) + '.csv'
+            file_name_new = '/'.join([sec_context.name, cfg.stack, ck]) + '.csv'
         if_exists = gnana_storage.if_exists(file_name_new, 'daily-results')
         fields_to_fetch = None
 
@@ -1894,6 +1902,10 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
     buffer_time = 3 * 60 * 60 * 1000
     qperiod, mperiod, is_curr_q = janky_period_parser(period)
 
+    cname=os.environ.get("CNAME", "preprod")
+    resolver = TenantMongoResolver()
+    cfg = resolver.resolve(sec_context.name, cname=cname, db_type="gbm")
+
     if get_results_from_as_of and not changed_deals:
         asof, ck = get_latest_daily(qperiod, mperiod)
         model = 'existingpipeforecast'
@@ -1909,7 +1921,7 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
         asof, ck = get_latest_daily(qperiod, mperiod, timestamp)
         model = 'existingpipeforecast'
         if return_files_list:
-            file_name = '/'.join([sec_context.name, CNAME, ck])
+            file_name = '/'.join([sec_context.name, cfg.stack, ck])
             counter = 0
             if gnana_storage.if_exists(file_name + '_' + str(counter) + '.csv', 'daily-results'):
                 results[timestamp] = [file_name + '_' + str(counter) + '.csv']
@@ -1933,7 +1945,7 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
             if chip_asof and ((chip_asof + buffer_time) > asof) and (chip_asof < timestamp):
                 asof, ck, model = chip_asof, chip_ck, 'bookings_rtfm'
 
-        file_name = '/'.join([sec_context.name, CNAME, ck]) + '.csv'
+        file_name = '/'.join([sec_context.name, cfg.stack, ck]) + '.csv'
         if_exists = gnana_storage.if_exists(file_name, 'daily-results')
         fields_to_fetch = None
 
