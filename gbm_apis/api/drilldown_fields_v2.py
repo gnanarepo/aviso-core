@@ -1,5 +1,5 @@
 import itertools
-import json
+import json, os
 import logging
 
 from collections import defaultdict
@@ -16,6 +16,9 @@ from gbm_apis.framework.baseView import AvisoView
 from aviso.settings import sec_context
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+
+from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
+from gbm_apis.deal_result.result_Utils import deals_results_by_period
 
 logger = logging.getLogger("aviso-core.%s" % __name__)
 
@@ -177,9 +180,28 @@ def build_global_territory_owners(groups: Iterable[Iterable[str]], period: Optio
         logger.warning("sec_context.etl not available; returning empty drilldown set")
         return {}
 
-    records = sec_context.etl.uip(
-        "UIPIterator", dataset="OppDS", record_filter=record_filter, fields_requested=list(required_fields)
-    )
+    # records = sec_context.etl.uip(
+    #     "UIPIterator", dataset="OppDS", record_filter=record_filter, fields_requested=list(required_fields),
+    #     skip_prepare=True
+    # )
+
+    cname = os.environ.get("CNAME", "preprod")
+    etl_db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=sec_context.name, db_type='etl', cname=cname)
+
+    coll = etl_db[sec_context.name + '.OppDS._uip._data']
+
+    projection = {
+        "object.terminal_date": 1 
+    }
+
+    for field in required_fields:
+        projection[f"object.history.{field}"] = 1
+
+    records = coll.find(
+        record_filter,
+        projection=projection,
+        no_cursor_timeout=True
+    ).batch_size(50000)
 
     hierarchy = _fetch_raw_hierarchy()
     parents = {}
@@ -229,36 +251,79 @@ def build_global_territory_owners(groups: Iterable[Iterable[str]], period: Optio
     processed_count = 0
     skipped_count = 0
 
+    # for record in records:
+    #     #print("Processing record:", record)
+    #     # raise
+    #     feat_map = record['object']['history']
+    #     #print("Feature map keys:", feat_map.keys())
+    #     # raise
+    #     if territory_key not in feat_map:
+    #         skipped_count += 1
+    #         continue
+
+    #     territory_data = feat_map[territory_key]
+    #     if not territory_data:
+    #         skipped_count += 1
+    #         continue
+        
+    #     #print("Territory data:", territory_data)
+    #     leaf_node = territory_data[-1][1]
+    #     if leaf_node not in global_children_set:
+    #         skipped_count += 1
+    #         continue
+
+    #     processed_count += 1
+    #     for group_name, field_mappings in group_configs:
+    #         current_row = []
+    #         for fld_label, map_key in field_mappings:
+    #             if map_key in feat_map:
+    #                 field_data = feat_map[map_key]
+    #                 if field_data:
+    #                     current_row.append([fld_label, field_data[-1][1]])
+    #                 else:
+    #                     current_row.append([fld_label, "N/A"])
+    #             else:
+    #                 current_row.append([fld_label, "N/A"])
+    #         staging[group_name][leaf_node].add(tuple(tuple(pair) for pair in current_row))
+
     for record in records:
-        feat_map = record.featMap
-        if territory_key not in feat_map:
+        obj = record.get("object")
+        if not obj:
             skipped_count += 1
             continue
 
-        territory_data = feat_map[territory_key]
+        history = obj.get("history")
+        if not history:
+            skipped_count += 1
+            continue
+
+        # Get territory data (single lookup only)
+        territory_data = history.get(territory_key)
         if not territory_data:
             skipped_count += 1
             continue
 
+        # Get leaf node
         leaf_node = territory_data[-1][1]
+
         if leaf_node not in global_children_set:
             skipped_count += 1
             continue
 
         processed_count += 1
-        for group_name, field_mappings in group_configs:
-            current_row = []
-            for fld_label, map_key in field_mappings:
-                if map_key in feat_map:
-                    field_data = feat_map[map_key]
-                    if field_data:
-                        current_row.append([fld_label, field_data[-1][1]])
-                    else:
-                        current_row.append([fld_label, "N/A"])
-                else:
-                    current_row.append([fld_label, "N/A"])
-            staging[group_name][leaf_node].add(tuple(tuple(pair) for pair in current_row))
 
+        # Process groups
+        for group_name, field_mappings in group_configs:
+            row = []
+
+            for fld_label, map_key in field_mappings:
+                field_data = history.get(map_key)
+                value = field_data[-1][1] if field_data else "N/A"
+                row.append((fld_label, value))  # use tuple directly
+
+            staging[group_name][leaf_node].add(tuple(row)) 
+
+            
     logger.info(
         "build_global_territory_owners: processed %s records, skipped %s records",
         processed_count,
@@ -302,32 +367,32 @@ def drilldown_values_by_owner_v2(drilldown: str, periods: Iterable[str]):
     return output
 
 
-def deals_results_by_period(periods: Iterable[str]) -> Dict[str, Dict[str, Any]]:
-    """
-    Lightweight helper to fetch deal results for the requested periods.
-    """
-    results: Dict[str, Dict[str, Any]] = {}
-    if sec_context and getattr(sec_context, "gbm", None):
-        gbm_client = sec_context.gbm
-        for period in periods:
-            try:
-                url = f"/gbm/deals_results?period={period}"
-                results[period] = gbm_client.api(url, None) or {"results": {}}
-            except Exception as exc:
-                logger.exception("Failed to fetch deals results for %s", period, exc_info=exc)
-                results[period] = {"results": {}}
-    else:
-        logger.warning("GBM client not configured; returning empty results for periods %s", list(periods))
-        for period in periods:
-            results[period] = {"results": {}}
-    return results
+# def deals_results_by_period(periods: Iterable[str]) -> Dict[str, Dict[str, Any]]:
+#     """
+#     Lightweight helper to fetch deal results for the requested periods.
+#     """
+#     results: Dict[str, Dict[str, Any]] = {}
+#     if sec_context and getattr(sec_context, "gbm", None):
+#         gbm_client = sec_context.gbm
+#         for period in periods:
+#             try:
+#                 url = f"/gbm/deals_results?period={period}"
+#                 results[period] = gbm_client.api(url, None) or {"results": {}}
+#             except Exception as exc:
+#                 logger.exception("Failed to fetch deals results for %s", period, exc_info=exc)
+#                 results[period] = {"results": {}}
+#     else:
+#         logger.warning("GBM client not configured; returning empty results for periods %s", list(periods))
+#         for period in periods:
+#             results[period] = {"results": {}}
+#     return results
 
 
-def drilldown_values_by_period(periods: Iterable[str], groups: Iterable[Iterable[str]]):
+def drilldown_values_by_period(periods, groups,):
     """
     Given a set of drilldown groups, return all possible combos of those field values.
     """
-    output: Dict[str, Dict[str, List[List[tuple]]]] = {}
+    output = {}
     curr_period = current_period().mnemonic
 
     for period in periods:

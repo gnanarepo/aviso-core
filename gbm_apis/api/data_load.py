@@ -1,7 +1,9 @@
+import json
 import os
 
 from aviso.settings import sec_context
 from aviso.utils.dateUtils import TimeHorizon
+from aviso.utils import is_true
 
 import logging
 import collections
@@ -73,7 +75,9 @@ class DataLoad:
             period,
             run_type='chipotle',
             from_timestamp=0,
-            changed_fields_only=False):
+            changed_fields_only=False,
+            return_oppids_only=False):
+        
         self.id_list = id_list
         self.from_timestamp = from_timestamp
         self.tenant_name = tenant_name
@@ -84,6 +88,7 @@ class DataLoad:
         self.changed_fields_only = changed_fields_only
         self.run_type = run_type
         self.period = period
+        self.return_oppids_only = return_oppids_only
 
     def get_basic_results(self):
         ds = Dataset.getByNameAndStage('OppDS', None)
@@ -113,7 +118,27 @@ class DataLoad:
         deals = list(coll.find(criteria, {'_id': 0}))
 
         logger.info(f"got result length of deals: {len(deals)}")
-        
+
+        if self.return_oppids_only:
+            try:
+                #opp_ids_records = sec_context.etl.uip('UIPIterator', dataset='OppDS', record_filter=criteria, fields_requested=['ID'])
+                if deals:
+                    oppids_list = [deal['object']['extid'] for deal in deals]
+                else:
+                    oppids_list = []
+                logger.info("Number of oppids fetched: %s", len(oppids_list))
+                
+                return {
+                    'oppids': oppids_list
+                }
+            except Exception as e:
+                logger.error("Exception occurred while fetching opp_ids_records: %s", str(e))
+                error_response = {
+                    "success": False,
+                    "error": str(e)
+                }
+                return error_response
+            
         final_deals = []
         from_timestamp_xl = (self.from_timestamp / 1000.0) / 86400 + 25569
         for deal in deals:
@@ -425,6 +450,8 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             changed_fields_param = request.GET.get('changed_fields_only', 'false')
             changed_fields_only = changed_fields_param.lower() == 'true'
 
+            return_oppids_only = is_true(request.GET.get('return_oppids_only', False))
+
             if not all([tenant_name, stack]):
                 return JsonResponse(
                     {"error": "Missing required fields (tenant_name, stack)"},
@@ -444,11 +471,15 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
                 period=period,
                 run_type=run_type,
                 from_timestamp=from_timestamp,
-                changed_fields_only=changed_fields_only
+                changed_fields_only=changed_fields_only,
+                return_oppids_only=return_oppids_only
             )
 
             # 5. Get Basic Results
             basic_results = loader.get_basic_results()
+
+            if return_oppids_only:
+                return JsonResponse(basic_results, safe=False, status=200)
 
             # 6. Initialize RevenueSchedule
             scheduler = RevenueSchedule(period=period, basic_results=basic_results)

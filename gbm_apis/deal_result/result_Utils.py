@@ -1247,7 +1247,7 @@ def get_individual_results_generator(
 
     if cached_records is None:
         all_results = res_cls.findDocuments(criteria)
-        print(f"Total records fetched from DB: {len(list(res_cls.findDocuments(criteria)))}")
+        #print(f"Total records fetched from DB: {len(list(res_cls.findDocuments(criteria)))}")
 
     else:
         all_results = cached_records
