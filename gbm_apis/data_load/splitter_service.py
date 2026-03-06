@@ -83,6 +83,9 @@ class CoolerSplitterService:
                 output[field][split_id] = self.try_num_val(record[field], ratio)
             for field in prim_str_fields:
                 output[field][split_id] = self.try_str_val(record[field], split_id)
+                if field + '_ratios' not in output:
+                    output[field + '_ratios'] = {}
+                output[field + '_ratios'][split_id] = ratio
             # for field in set(output) & self.ignore_fields:
             #    output[field][split_id] = record[field]
 
@@ -98,6 +101,9 @@ class CoolerSplitterService:
                     output[field][split_id] = self.try_num_val(record[field], ratio)
                 for field in o_str_fields:
                     output[field][split_id] = self.try_num_ratio(record[field], split_id)
+                    if field + '_ratios' not in output:
+                        output[field + '_ratios'] = {}
+                    output[field + '_ratios'][split_id] = ratio
         return output, split_ids
 
     def try_num_val(self, val, ratio):

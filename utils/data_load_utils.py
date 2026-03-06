@@ -86,13 +86,13 @@ def get_dd_list(viewgen_config, values, drilldowns, prune_prefix):
                         # Uses .get with explicit default list to prevent KeyError
                         #curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '##not_in_hier', []))
                         curr_drilldowns = drilldowns.get(leaf_val, [pivot + '##unmapped', pivot + '##!']
-                                                 if val == 'N/A' else drilldowns.get(pivot + '##not_in_hier', []))
+                                                 if (leaf == 'N/A' or leaf == 'unmapped') else drilldowns.get(pivot + '##not_in_hier', []))
                     else:
                         leaf_val = pivot + '#' + leaf
                         # Uses .get with explicit default list to prevent KeyError
                         #curr_drilldowns = drilldowns.get(leaf_val, drilldowns.get(pivot + '#not_in_hier', []))
                         curr_drilldowns = drilldowns.get(leaf_val, [pivot + '#unmapped', pivot + '#!']
-                                                 if val == 'N/A' else drilldowns.get(pivot + '#not_in_hier', []))
+                                                 if (leaf == 'N/A' or leaf == 'unmapped') else drilldowns.get(pivot + '#not_in_hier', []))
 
                     # Update main drilldown list
                     for drilldown in curr_drilldowns:

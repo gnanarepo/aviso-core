@@ -104,6 +104,14 @@ You should now be able to successfully hit the APIs at `http://127.0.0.1:8000/`.
 --> python -m build
 --> Check dist folder to check the version of wheel created 
 
+*** Update Wheels (After Code Changes in Aviso-Infra)
+--> bump version in project.toml (version = "0.1.1" <->"0.1.2")
+--> rm -rf build dist *.egg-info
+--> python -m build
+--> Copy the newly created wheels in /wheels folder and move the old<>last wheel to wheels_backup folder
+--> cp ../aviso-infrastructure/dist/aviso-0.1.2-py3-none-any.whl wheels 
+--> mv wheels/aviso-0.1.1-py3-none-any.whl wheels_backup/
+
 1. EventBus Package Repo :Clone Locally, changed branch and Create Wheel of EventBus, get the version of wheel and add in project.toml of aviso-infra repo, eg: "eventbus==1.0"
 
 2. AvisoSDK Package Repo: Clone Locally, switch to changed branch and Create Wheel of AvisoSDK, get the version of wheel and add in project.toml of aviso-infra repo, eg: "avisosdk==1.0.0"
@@ -119,3 +127,23 @@ You should now be able to successfully hit the APIs at `http://127.0.0.1:8000/`.
 6. Builder Docker Image :  docker build --no-cache -t aviso-core .
 
 7. Run Docker Locally: docker run --env-file .env -p 8000:8000 aviso-core 
+
+
+## Upload/Download/List/Exists Backup_Wheels
+
+** cd wheels_manager/ and then run in terminal**
+
+1. List:
+-->python manage_wheels.py list
+Output: aviso/aviso-0.1.0-py3-none-any.whl
+
+2. Upload:
+--> python manage_wheels.py upload --path ../wheels_backup/aviso-0.1.1-py3-none-any.whl
+Output: INFO:__main__:Uploaded ../wheels_backup/aviso-0.1.1-py3-none-any.whl -> s3://aviso-core-wheel/aviso/aviso-0.1.1-py3-none-any.whl
+
+3. Exists:
+--> python manage_wheels.py exists --file aviso/aviso-0.1.0-py3-none-any.whl
+Output: True/False
+
+4. Download:
+--> python manage_wheels.py download --file aviso-0.1.0-py3-none-any.whl
