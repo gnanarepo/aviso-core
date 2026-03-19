@@ -19,6 +19,15 @@ from utils import GnanaError, forwardmap, update_dict
 from utils.config_utils import config_pattern_expansion
 from utils.date_utils import datetime2epoch, get_a_date_time_as_float_some_how
 from utils.math_utils import excelToFloat
+from aviso.utils import is_true
+
+from gbm_apis.analyticengine.forecast2 import Forecast2
+from gbm_apis.analyticengine.unborn_base import UnbornBaseModel
+from gbm_apis.analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
+from gbm_apis.analyticengine.forecast2_no_ads import Forecast2_no_ds
+from gbm_apis.analyticengine.forecast import Forecast
+from gbm_apis.analyticengine.forecast5 import Forecast5
+
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -39,6 +48,15 @@ FieldType = namedtuple('FieldType', [
     'type',
     'formats'
 ])
+
+model_types = {
+    'forecast.Forecast': Forecast,
+    'forecast2.Forecast2': Forecast2,
+    'forecast5.Forecast5': Forecast5,
+    'forecast.UnbornForecast': UnbornBaseModel,
+    'forecast.UnbornForecastZD': UnbornBaseModelZeroDawn,
+    'forecast2.Forecast2_no_ds': Forecast2_no_ds,
+}
 
 def DatasetClass(ds, target='_data'):
     new_index_list = UIPRecord.index_list.copy()
@@ -928,82 +946,82 @@ class Dataset(Model):
 
 
     # TODO: commenting this out because this is not required in hierarchy sync task.
-    # def get_model_instance(self, model_name, time_horizon, drilldowns=None):
-    #     if not time_horizon:
-    #         logger.exception(
-    #             'Getting model instance requires a time_horizon. Use get_model_class.')
-    #     try:
-    #         model_cls = self.get_model_class(model_name)
-    #         return model_cls(time_horizon, dimensions=drilldowns)
-    #     except:
-    #         logger.exception(
-    #             "Unable to create model instance for %s", model_name, exc_info=True)
-    #         raise
-    #
-    # def get_model_class(self, model):
-    #     '''
-    #     Dynamically creates a subclass of a AnalysisModel that is tenant and config specific.
-    #
-    #     model_name = name of the model in dataset config
-    #     '''
-    #
-    #     try:
-    #         common_info = self.models['common']
-    #         model_info = self.models[model]
-    #
-    #         # Create a field map and configuration with combination of common
-    #         # and specific values
-    #         fld_map = common_info.field_map.copy()
-    #         fld_map.update(model_info.field_map)
-    #
-    #         # We will do some special magic for algorithm_params, so that
-    #         # they are merged properly
-    #         alg_config = common_info.config.get('algorithm_params', {}).copy()
-    #         alg_config.update(model_info.config.get('algorithm_params', {}))
-    #
-    #         cfg = common_info.config.copy()
-    #         cfg.update(model_info.config)
-    #         cfg['algorithm_params'] = alg_config
-    #         cfg["ds_params"] = self.params
-    #
-    #         base_class = model_types[self.models[model].type]
-    #
-    #         # TODO: This is not not the expected use of dimensions parameter in
-    #         # the dataset
-    #         drilldowns = self.params['general'].get("dimensions")
-    #
-    #         class CustomerSpecificModelClass(base_class):
-    #             model_name = model
-    #             gnana_super_class = base_class
-    #             field_map = fld_map
-    #             config = cfg
-    #
-    #             def __init__(self, time_horizon, dimensions=None):
-    #                 # Set up for parameters used in answers.py
-    #                 self.buffer_size = int(
-    #                     model_info.config.get('buffer_size', 1024))
-    #                 self.master_buffer_size = int(
-    #                     model_info.config.get('master_buffer_size', 50000))
-    #                 self.hist_buffer_size = int(
-    #                     model_info.config.get('hist_buffer_size', 5000))
-    #                 self.hist_iterate_only = int(
-    #                     model_info.config.get('hist_iterate_only', False))
-    #                 self.skip_prepare = is_true(
-    #                     model_info.config.get('skip_prepare'))
-    #                 self.raise_prepare_errors = is_true(
-    #                     model_info.config.get('raise_prepare_errors', True))
-    #
-    #                 super(CustomerSpecificModelClass, self).__init__(field_map=fld_map,
-    #                                                                  config=cfg,
-    #                                                                  time_horizon=time_horizon,
-    #                                                                  dimensions=drilldowns if dimensions is None
-    #                                                                  else dimensions)
-    #
-    #         return CustomerSpecificModelClass
-    #     except:
-    #         logger.error(
-    #             "Unable to create model class for %s", model, exc_info=True)
-    #         raise
+    def get_model_instance(self, model_name, time_horizon, drilldowns=None):
+        if not time_horizon:
+            logger.exception(
+                'Getting model instance requires a time_horizon. Use get_model_class.')
+        try:
+            model_cls = self.get_model_class(model_name)
+            return model_cls(time_horizon, dimensions=drilldowns)
+        except:
+            logger.exception(
+                "Unable to create model instance for %s", model_name, exc_info=True)
+            raise
+    
+    def get_model_class(self, model):
+        '''
+        Dynamically creates a subclass of a AnalysisModel that is tenant and config specific.
+    
+        model_name = name of the model in dataset config
+        '''
+    
+        try:
+            common_info = self.models['common']
+            model_info = self.models[model]
+    
+            # Create a field map and configuration with combination of common
+            # and specific values
+            fld_map = common_info.field_map.copy()
+            fld_map.update(model_info.field_map)
+    
+            # We will do some special magic for algorithm_params, so that
+            # they are merged properly
+            alg_config = common_info.config.get('algorithm_params', {}).copy()
+            alg_config.update(model_info.config.get('algorithm_params', {}))
+    
+            cfg = common_info.config.copy()
+            cfg.update(model_info.config)
+            cfg['algorithm_params'] = alg_config
+            cfg["ds_params"] = self.params
+    
+            base_class = model_types[self.models[model].type]
+    
+            # TODO: This is not not the expected use of dimensions parameter in
+            # the dataset
+            drilldowns = self.params['general'].get("dimensions")
+    
+            class CustomerSpecificModelClass(base_class):
+                model_name = model
+                gnana_super_class = base_class
+                field_map = fld_map
+                config = cfg
+    
+                def __init__(self, time_horizon, dimensions=None):
+                    # Set up for parameters used in answers.py
+                    self.buffer_size = int(
+                        model_info.config.get('buffer_size', 1024))
+                    self.master_buffer_size = int(
+                        model_info.config.get('master_buffer_size', 50000))
+                    self.hist_buffer_size = int(
+                        model_info.config.get('hist_buffer_size', 5000))
+                    self.hist_iterate_only = int(
+                        model_info.config.get('hist_iterate_only', False))
+                    self.skip_prepare = is_true(
+                        model_info.config.get('skip_prepare'))
+                    self.raise_prepare_errors = is_true(
+                        model_info.config.get('raise_prepare_errors', True))
+    
+                    super(CustomerSpecificModelClass, self).__init__(field_map=fld_map,
+                                                                     config=cfg,
+                                                                     time_horizon=time_horizon,
+                                                                     dimensions=drilldowns if dimensions is None
+                                                                     else dimensions)
+    
+            return CustomerSpecificModelClass
+        except:
+            logger.error(
+                "Unable to create model class for %s", model, exc_info=True)
+            raise
 
     def get_model_filter(self, model_name):
         """ Return the filter to be used for running this model
