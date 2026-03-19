@@ -27,6 +27,7 @@ from gbm_apis.analyticengine.forecast2 import Forecast2
 from gbm_apis.analyticengine.unborn_base import UnbornBaseModel
 from gbm_apis.analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
 from gbm_apis.analyticengine.forecast2_no_ads import Forecast2_no_ds
+from gbm_apis.analyticengine.forecast import Forecast
 
 #gnana settings may be removed later by waqas
 from aviso.framework.postgresdb import GnanaPostgresDB
@@ -95,7 +96,7 @@ FieldType = namedtuple('FieldType', [
 # --- Model Support ---
 from gbm_apis.analyticengine.forecast5 import Forecast5
 model_types = {
-    # 'forecast.Forecast': Forecast,
+    'forecast.Forecast': Forecast,
     'forecast2.Forecast2': Forecast2,
     'forecast5.Forecast5': Forecast5,
     'forecast.UnbornForecast': UnbornBaseModel,
