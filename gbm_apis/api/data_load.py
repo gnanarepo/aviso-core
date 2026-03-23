@@ -115,19 +115,56 @@ class DataLoad:
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
         criteria = criteria_builder.get_criteria()
-        deals = list(coll.find(criteria, {'_id': 0}))
 
-        logger.info(f"got result length of deals: {len(deals)}")
+        fieldmap = {}
+        for f in uipfield:
+            oppds_field = prune_pfx(f)
+            fieldmap.update({f: oppds_field})
+
+        required_fields = set()
+
+        #UIP fields
+        for fld in uipfield:
+            required_fields.add(f"object.values.{prune_pfx(fld)}")
+
+        filter_related_fields = [filter_expr if filter_expr[-1:] != ')' else filter_expr[0:-1].split('(')[1]
+                                 for filter_expr, values in record_filter.items()]
+        
+        act_filter_related_fields = [field if "use_value" not in field else field.split(',')[0] if "use_value" not in field.split(',')[0] \
+            else field.split(',')[1] for field in filter_related_fields]
+        
+        for fld in act_filter_related_fields:
+            required_fields.add(f"object.values.{fld}")
+
+        self.model_inst = ds.get_model_instance('bookings_rtfm', th, [])
+        stage_field_name = self.model_inst.stage_field_name
+        required_fields.add(f"object.values.{stage_field_name}")
+
+       # always required
+        required_fields.add("object.extid")
+
+        # history 
+        required_fields.add("object.history")
+
+        required_fields.discard(None)
+
+        projection = {field: 1 for field in required_fields}
+        projection["_id"] = 0
 
         if self.return_oppids_only:
             try:
                 #opp_ids_records = sec_context.etl.uip('UIPIterator', dataset='OppDS', record_filter=criteria, fields_requested=['ID'])
-                if deals:
-                    oppids_list = [deal['object']['extid'] for deal in deals]
-                else:
-                    oppids_list = []
+                projection = {
+                    "object.extid": 1,
+                    "_id": 0
+                }
+
+                cursor = coll.find(criteria, projection, batch_size=10000)
+
+                oppids_list = [deal['object']['extid'] for deal in cursor]
+
                 logger.info("Number of oppids fetched: %s", len(oppids_list))
-                
+
                 return {
                     'oppids': oppids_list
                 }
@@ -138,10 +175,14 @@ class DataLoad:
                     "error": str(e)
                 }
                 return error_response
-            
+        
+        deals_cursor = coll.find(criteria, projection, batch_size=1000)
+        deals_count = 0
+        
         final_deals = []
         from_timestamp_xl = (self.from_timestamp / 1000.0) / 86400 + 25569
-        for deal in deals:
+        for deal in deals_cursor:
+            deals_count += 1
             if use_core_show:
                 allow_deal = DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
                                                   record_filter) and DataLoad.core_show(deal['object']['history'], boq, eoq)
@@ -169,9 +210,14 @@ class DataLoad:
                     except:
                         temp[fld] = value
 
-            #print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+            
+            for f, oppds_field in fieldmap.items():
+                raw = values.get(oppds_field, 'N/A')
+                # force into JSON-safe string
+                json_safe = json.dumps(raw)
+                values[f] = json.loads(json_safe)
+            
             drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
-            #print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
             temp['__segs'] = drilldown_list
             if split_fields:
                 for fld, val in split_fields.items():
@@ -198,6 +244,7 @@ class DataLoad:
 
             final_deals.append(temp)
 
+        logger.info(f"processed deals count: {deals_count}")
         return final_deals
 
     def _get_criteria_strategy(self, boq, eoq):
@@ -436,11 +483,11 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             period = request.GET.get('period')
             run_type = request.GET.get('run_type', 'chipotle')
 
-            id_list_raw = request.GET.get('id_list', '')
-            if id_list_raw:
-                id_list = [x.strip() for x in id_list_raw.split(',') if x.strip()]
-            else:
-                id_list = []
+            id_list = request.GET.getlist('id_list', '')
+            # if id_list_raw:
+            #     id_list = [x.strip() for x in id_list_raw.split(',') if x.strip()]
+            # else:
+            #     id_list = []
 
             try:
                 from_timestamp = int(request.GET.get('from_timestamp', 0))
