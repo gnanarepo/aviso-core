@@ -43,7 +43,7 @@ def get_dd_list(viewgen_config, values, drilldowns, prune_prefix):
     split_fields = {}
 
     # --- 1. Split Config Processing (Initialization) ---
-    for split_pivot, split_pivot_config in viewgen_config['split_config'].items():
+    for split_pivot, split_pivot_config in viewgen_config.get('split_config', {}).items():
         for split_name, split_dtls in split_pivot_config.items():
             if type(split_dtls) != list:
                 split_dtls = [split_dtls]
@@ -64,7 +64,7 @@ def get_dd_list(viewgen_config, values, drilldowns, prune_prefix):
     for pivot, dd_dtls in viewgen_config['drilldown_config'].items():
         leaf_field = viewgen_config['hier_config'][dd_dtls['hier']].get('leaf_field', 'as_of_OwnerID')
         node_config = viewgen_config['node_config'][dd_dtls['node']]
-        split_config = viewgen_config['split_config'].get(dd_dtls['split'], {})
+        split_config = viewgen_config.get('split_config', {}).get(dd_dtls['split'], {})
 
         if split_config:
             # Get the leaf values (the split identifiers)
