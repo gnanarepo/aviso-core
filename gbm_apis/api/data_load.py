@@ -44,6 +44,11 @@ class CriteriaBuilder(ABC):
         pass
 
 
+class SelfServeCriteriaBuilder(CriteriaBuilder):
+        def get_criteria(self):
+            return {'object.terminal_date': {'$gte': self.boq}}
+
+
 class ChipotleCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
         if self.data_load.from_timestamp:
@@ -76,7 +81,8 @@ class DataLoad:
             run_type='chipotle',
             from_timestamp=0,
             changed_fields_only=False,
-            return_oppids_only=False):
+            return_oppids_only=False
+            self_serve_setup=False):
         
         self.id_list = id_list
         self.from_timestamp = from_timestamp
@@ -89,6 +95,7 @@ class DataLoad:
         self.run_type = run_type
         self.period = period
         self.return_oppids_only = return_oppids_only
+        self.self_serve_setup = self_serve_setup
 
     def get_basic_results(self):
         ds = Dataset.getByNameAndStage('OppDS', None)
@@ -205,10 +212,11 @@ class DataLoad:
             else:
                 for fld in uipfield:
                     value = values.get(prune_pfx(fld), 'N/A')
+                    fld_params = prune_pfx(fld) if self.self_serve_setup else fld
                     try:
-                        temp[fld] = loads(value)
+                        temp[fld_params] = loads(value)
                     except:
-                        temp[fld] = value
+                        temp[fld_params] = value
 
             
             for f, oppds_field in fieldmap.items():
@@ -250,6 +258,9 @@ class DataLoad:
     def _get_criteria_strategy(self, boq, eoq):
         if self.run_type == 'chipotle':
             return ChipotleCriteriaBuilder(self, boq=boq, eoq=eoq)
+
+        elif self.self_serve_setup and self.run_type == 'current':
+            return SelfServeCriteriaBuilder(self, boq=boq, eoq=eoq)
 
         elif self.period  and self.run_type == 'current':
             return CurrentQuarterCriteriaBuilder(self, boq=boq, eoq=eoq)
