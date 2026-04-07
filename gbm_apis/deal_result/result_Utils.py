@@ -4,7 +4,7 @@ from aviso.utils.misc_utils import try_float
 from django.http.response import (HttpResponseNotFound)
 from django.http.request import QueryDict
 import traceback
-import sys
+import sys, os
 from aviso.settings import sec_context,gnana_db
 import logging
 from aviso.utils import GnanaError
@@ -17,6 +17,9 @@ from ..deal_result.viewgen_service import CoolerViewGeneratorService
 from ..deal_result.splitter_service import ViewGeneratorService
 from ..deal_result.node_service import gimme_node_service
 from ..deal_result.hierarchy_service import CoolerHierarchyService
+
+from aviso.framework.tenant_mongo_resolver import TenantMongoResolver 
+
 
 logger = logging.getLogger('gnana.%s' % __name__)
 basestring = str
@@ -268,11 +271,11 @@ def generate_subscription_same_dd_single_rec(rev_period, drilldown, close_date_f
 
 
 
-def generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld, expiration_date_fld, type_fld, renewal_vals, opp_id, res):
+def generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld, expiration_date_fld, type_fld, renewal_vals, opp_id, res, splitted_fields):
     ret_val = {}
     dict_flds = ['eACV', 'won_amount', 'lost_amount', 'active_amount', 'forecast',
                  'existing_pipe_active_amount', 'existing_pipe_won_amount', 'existing_pipe_lost_amount',
-                 'new_pipe_active_amount', 'new_pipe_won_amount', 'new_pipe_lost_amount']
+                 'new_pipe_active_amount', 'new_pipe_won_amount', 'new_pipe_lost_amount'] + splitted_fields
 
     deal_type = res.get(type_fld, 'N/A')
     try:
@@ -298,6 +301,7 @@ def generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_da
                     if not element.startswith(renewal_drilldown + '#'):
                         del(ret_val[dummy_id][fld][element])
         ret_val[dummy_id][close_date_fld] = res.get(expiration_date_fld, 0.0)
+        ret_val[dummy_id]['__dummy_deal_rec'] = True
 
     return ret_val
 
@@ -1243,7 +1247,7 @@ def get_individual_results_generator(
 
     if cached_records is None:
         all_results = res_cls.findDocuments(criteria)
-        print(f"Total records fetched from DB: {len(list(res_cls.findDocuments(criteria)))}")
+        #print(f"Total records fetched from DB: {len(list(res_cls.findDocuments(criteria)))}")
 
     else:
         all_results = cached_records
@@ -1313,6 +1317,18 @@ def get_individual_results_generator(
         expiration_date_fld = rev_schedule_config.get('expiration_date_fld', 'ExpirationDate')
         type_fld = rev_schedule_config.get('type_fld', 'Type')
         renewal_vals = rev_schedule_config.get('renewal_vals', ['Renewal'])
+        
+        ##Druva Splits
+        viewgen_config = ds_inst.models['common'].config.get('viewgen_config', {})
+        splitted_fields = []
+        if viewgen_config['split_config']:
+            split_config = viewgen_config['split_config'][list(viewgen_config['split_config'])[0]]
+            for _, dtls in split_config.items():
+                if type(dtls) != list:
+                    dtls = [dtls]
+                for element in dtls:
+                    splitted_fields += element['num_fields']
+                    
     if rev_schedule_config.get('prd_rev_schedule', False) and rev_schedule_config.get('github_metered_billing', False):
         renewal_drilldown = rev_schedule_config.get('renewal_drilldown', 'Renewal')
         close_date_fld = rev_schedule_config.get('close_date_fld', 'CloseDate')
@@ -1366,7 +1382,14 @@ def get_individual_results_generator(
                 else:
                     yield (extid, output)
         elif rev_schedule_config.get('prd_rev_schedule', False) and rev_schedule_config.get('expiration_date_renewals_rec', False):
-            output_dict = generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld, expiration_date_fld, type_fld, renewal_vals, extid, output)
+            output_dict = generate_expiration_date_renewal_rec(rev_period, 
+                                                               renewal_drilldown, 
+                                                               close_date_fld, 
+                                                               expiration_date_fld, 
+                                                               type_fld, 
+                                                               renewal_vals, 
+                                                               extid, output, 
+                                                               splitted_fields)
             for extid, output in output_dict.items():
                 if custom_fields:
                     yield (extid, {key: output[key] for key in custom_fields if key in output})
@@ -1637,6 +1660,11 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
     results = {}
     new_file_name_results = {}
     buffer_time = 3 * 60 * 60 * 1000
+    
+    cname=os.environ.get("CNAME", "preprod")
+    resolver = TenantMongoResolver()
+    cfg = resolver.resolve(sec_context.name, cname=cname, db_type="gbm")
+
     for period in periods:
         results[period] = {}
         qperiod, mperiod, is_curr_q = janky_period_parser(period)
@@ -1645,7 +1673,7 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
         year, month, day = datetime.datetime.fromtimestamp(get_results_from_as_of / 1000,
                                                            tz=datetime.timezone.utc).strftime("%Y,%m,%d").split(",")
         if return_files_list:
-            file_name = '/'.join([sec_context.name, CNAME, ck])
+            file_name = '/'.join([sec_context.name, cfg.stack, ck])
 
             counter = 0
             if gnana_storage.if_exists(file_name + '_' + str(counter) + '.csv', 'daily-results'):
@@ -1689,7 +1717,7 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
             file_name_new = "/".join(
                 ["chipotle-results", sec_context.name, year, month, day, f'chipotle_{get_results_from_as_of}']) + '.json'
         else:
-            file_name_new = '/'.join([sec_context.name, CNAME, ck]) + '.csv'
+            file_name_new = '/'.join([sec_context.name, cfg.stack, ck]) + '.csv'
         if_exists = gnana_storage.if_exists(file_name_new, 'daily-results')
         fields_to_fetch = None
 
@@ -1874,6 +1902,10 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
     buffer_time = 3 * 60 * 60 * 1000
     qperiod, mperiod, is_curr_q = janky_period_parser(period)
 
+    cname=os.environ.get("CNAME", "preprod")
+    resolver = TenantMongoResolver()
+    cfg = resolver.resolve(sec_context.name, cname=cname, db_type="gbm")
+
     if get_results_from_as_of and not changed_deals:
         asof, ck = get_latest_daily(qperiod, mperiod)
         model = 'existingpipeforecast'
@@ -1889,7 +1921,7 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
         asof, ck = get_latest_daily(qperiod, mperiod, timestamp)
         model = 'existingpipeforecast'
         if return_files_list:
-            file_name = '/'.join([sec_context.name, CNAME, ck])
+            file_name = '/'.join([sec_context.name, cfg.stack, ck])
             counter = 0
             if gnana_storage.if_exists(file_name + '_' + str(counter) + '.csv', 'daily-results'):
                 results[timestamp] = [file_name + '_' + str(counter) + '.csv']
@@ -1913,7 +1945,7 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
             if chip_asof and ((chip_asof + buffer_time) > asof) and (chip_asof < timestamp):
                 asof, ck, model = chip_asof, chip_ck, 'bookings_rtfm'
 
-        file_name = '/'.join([sec_context.name, CNAME, ck]) + '.csv'
+        file_name = '/'.join([sec_context.name, cfg.stack, ck]) + '.csv'
         if_exists = gnana_storage.if_exists(file_name, 'daily-results')
         fields_to_fetch = None
 

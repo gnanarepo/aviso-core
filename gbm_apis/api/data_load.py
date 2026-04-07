@@ -1,7 +1,9 @@
+import json
 import os
 
 from aviso.settings import sec_context
 from aviso.utils.dateUtils import TimeHorizon
+from aviso.utils import is_true
 
 import logging
 import collections
@@ -42,6 +44,11 @@ class CriteriaBuilder(ABC):
         pass
 
 
+class SelfServeCriteriaBuilder(CriteriaBuilder):
+        def get_criteria(self):
+            return {'object.terminal_date': {'$gte': self.boq}}
+
+
 class ChipotleCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
         if self.data_load.from_timestamp:
@@ -73,7 +80,10 @@ class DataLoad:
             period,
             run_type='chipotle',
             from_timestamp=0,
-            changed_fields_only=False):
+            changed_fields_only=False,
+            return_oppids_only=False,
+            self_serve_setup=False):
+        
         self.id_list = id_list
         self.from_timestamp = from_timestamp
         self.tenant_name = tenant_name
@@ -84,6 +94,8 @@ class DataLoad:
         self.changed_fields_only = changed_fields_only
         self.run_type = run_type
         self.period = period
+        self.return_oppids_only = return_oppids_only
+        self.self_serve_setup = self_serve_setup
 
     def get_basic_results(self):
         ds = Dataset.getByNameAndStage('OppDS', None)
@@ -110,13 +122,75 @@ class DataLoad:
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
         criteria = criteria_builder.get_criteria()
-        deals = list(coll.find(criteria, {'_id': 0}))
 
-        logger.info(f"got result length of deals: {len(deals)}")
+        fieldmap = {}
+        for f in uipfield:
+            oppds_field = prune_pfx(f)
+            fieldmap.update({f: oppds_field})
+
+        required_fields = set()
+
+        #UIP fields
+        for fld in uipfield:
+            required_fields.add(f"object.values.{prune_pfx(fld)}")
+
+        filter_related_fields = [filter_expr if filter_expr[-1:] != ')' else filter_expr[0:-1].split('(')[1]
+                                 for filter_expr, values in record_filter.items()]
+        
+        act_filter_related_fields = [field if "use_value" not in field else field.split(',')[0] if "use_value" not in field.split(',')[0] \
+            else field.split(',')[1] for field in filter_related_fields]
+        
+        for fld in act_filter_related_fields:
+            required_fields.add(f"object.values.{fld}")
+
+        self.model_inst = ds.get_model_instance('bookings_rtfm', th, [])
+        stage_field_name = self.model_inst.stage_field_name
+        required_fields.add(f"object.values.{stage_field_name}")
+
+       # always required
+        required_fields.add("object.extid")
+
+        # history 
+        required_fields.add("object.history")
+
+        required_fields.discard(None)
+
+        projection = {field: 1 for field in required_fields}
+        projection["_id"] = 0
+
+        if self.return_oppids_only:
+            try:
+                #opp_ids_records = sec_context.etl.uip('UIPIterator', dataset='OppDS', record_filter=criteria, fields_requested=['ID'])
+                projection = {
+                    "object.extid": 1,
+                    "_id": 0
+                }
+
+                cursor = coll.find(criteria, projection, batch_size=10000)
+
+                oppids_list = [deal['object']['extid'] for deal in cursor]
+
+                logger.info("Number of oppids fetched: %s", len(oppids_list))
+
+                return {
+                    'oppids': oppids_list
+                }
+            except Exception as e:
+                logger.error("Exception occurred while fetching opp_ids_records: %s", str(e))
+                error_response = {
+                    "success": False,
+                    "error": str(e)
+                }
+                return error_response
+
+        logger.info("Querying MongoDB with criteria: %s", criteria)
+        deals_cursor = coll.find(criteria, projection, batch_size=1000)
+        deals_count = 0
         
         final_deals = []
         from_timestamp_xl = (self.from_timestamp / 1000.0) / 86400 + 25569
-        for deal in deals:
+        for deal in deals_cursor:
+            deals_count += 1
             if use_core_show:
                 allow_deal = DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
                                                   record_filter) and DataLoad.core_show(deal['object']['history'], boq, eoq)
@@ -139,14 +213,20 @@ class DataLoad:
             else:
                 for fld in uipfield:
                     value = values.get(prune_pfx(fld), 'N/A')
+                    fld_params = prune_pfx(fld) if self.self_serve_setup else fld
                     try:
-                        temp[fld] = loads(value)
+                        temp[fld_params] = loads(value)
                     except:
-                        temp[fld] = value
+                        temp[fld_params] = value
 
-            #print('Computing drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
+            
+            for f, oppds_field in fieldmap.items():
+                raw = values.get(oppds_field, 'N/A')
+                # force into JSON-safe string
+                json_safe = json.dumps(raw)
+                values[f] = json.loads(json_safe)
+            
             drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
-            #print('Computed drilldowns for {} {}'.format(deal['object']['extid'], self.tenant_name))
             temp['__segs'] = drilldown_list
             if split_fields:
                 for fld, val in split_fields.items():
@@ -164,20 +244,26 @@ class DataLoad:
             ## active_amount Handling
             amount_fld = {'W': 'won_amount',
                               'L': 'lost_amount'}.get(temp['terminal_fate'], 'active_amount')
-            if type(temp[primary_amount_field]) == dict:
-                temp[amount_fld] = temp[primary_amount_field]
-            else:
-                temp[amount_fld] = {}
-                for node in temp['__segs']:
-                    temp[amount_fld][node] = temp[primary_amount_field]
+
+            if not self.self_serve_setup:
+                if type(temp[primary_amount_field]) == dict:
+                    temp[amount_fld] = temp[primary_amount_field]
+                else:
+                    temp[amount_fld] = {}
+                    for node in temp['__segs']:
+                        temp[amount_fld][node] = temp[primary_amount_field]
 
             final_deals.append(temp)
 
+        logger.info(f"processed deals count: {deals_count}")
         return final_deals
 
     def _get_criteria_strategy(self, boq, eoq):
         if self.run_type == 'chipotle':
             return ChipotleCriteriaBuilder(self, boq=boq, eoq=eoq)
+
+        elif self.self_serve_setup and self.run_type == 'current':
+            return SelfServeCriteriaBuilder(self, boq=boq, eoq=eoq)
 
         elif self.period  and self.run_type == 'current':
             return CurrentQuarterCriteriaBuilder(self, boq=boq, eoq=eoq)
@@ -320,12 +406,23 @@ class RevenueSchedule:
                 expiration_date_fld = rev_schedule_config.get('expiration_date_fld', 'ExpirationDate')
                 type_fld = rev_schedule_config.get('type_fld', 'Type')
                 renewal_vals = rev_schedule_config.get('renewal_vals', ['Renewal'])
+
+                viewgen_config = oppds.models['common'].config.get('viewgen_config', {})
+                splitted_fields = []
+                if viewgen_config['split_config']:
+                    split_config = viewgen_config['split_config'][list(viewgen_config['split_config'])[0]]
+                    for _, dtls in split_config.items():
+                        if type(dtls) != list:
+                            dtls = [dtls]
+                        for element in dtls:
+                            splitted_fields += element['num_fields']
+                
                 basic_results_dict_copy = deepcopy(basic_results_dict)
                 basic_results_dict = {}
                 for opp_id, res in basic_results_dict_copy.items():
                     output_dict = generate_expiration_date_renewal_rec(rev_period, renewal_drilldown, close_date_fld,
                                                                        expiration_date_fld, type_fld, renewal_vals,
-                                                                       opp_id, res)
+                                                                       opp_id, res, splitted_fields)
                     basic_results_dict.update(output_dict)
             else:
                 basic_results_dict = generate_revenue_recs(rev_period, drilldown, close_date_fld, basic_results_dict)
@@ -399,12 +496,13 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             etl_stack = os.environ.get('ETL_STACK')
             period = request.GET.get('period')
             run_type = request.GET.get('run_type', 'chipotle')
+            self_serve_setup = is_true(request.GET.get('self_serve_setup', False))
 
-            id_list_raw = request.GET.get('id_list', '')
-            if id_list_raw:
-                id_list = [x.strip() for x in id_list_raw.split(',') if x.strip()]
-            else:
-                id_list = []
+            id_list = request.GET.getlist('id_list', '')
+            # if id_list_raw:
+            #     id_list = [x.strip() for x in id_list_raw.split(',') if x.strip()]
+            # else:
+            #     id_list = []
 
             try:
                 from_timestamp = int(request.GET.get('from_timestamp', 0))
@@ -413,6 +511,8 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
 
             changed_fields_param = request.GET.get('changed_fields_only', 'false')
             changed_fields_only = changed_fields_param.lower() == 'true'
+
+            return_oppids_only = is_true(request.GET.get('return_oppids_only', False))
 
             if not all([tenant_name, stack]):
                 return JsonResponse(
@@ -433,11 +533,16 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
                 period=period,
                 run_type=run_type,
                 from_timestamp=from_timestamp,
-                changed_fields_only=changed_fields_only
+                changed_fields_only=changed_fields_only,
+                return_oppids_only=return_oppids_only,
+                self_serve_setup=self_serve_setup
             )
 
             # 5. Get Basic Results
             basic_results = loader.get_basic_results()
+
+            if return_oppids_only:
+                return JsonResponse(basic_results, safe=False, status=200)
 
             # 6. Initialize RevenueSchedule
             scheduler = RevenueSchedule(period=period, basic_results=basic_results)
