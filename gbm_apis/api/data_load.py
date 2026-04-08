@@ -44,6 +44,11 @@ class CriteriaBuilder(ABC):
         pass
 
 
+class SelfServeCriteriaBuilder(CriteriaBuilder):
+        def get_criteria(self):
+            return {'object.terminal_date': {'$gte': self.boq}}
+
+
 class ChipotleCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
         if self.data_load.from_timestamp:
@@ -76,7 +81,8 @@ class DataLoad:
             run_type='chipotle',
             from_timestamp=0,
             changed_fields_only=False,
-            return_oppids_only=False):
+            return_oppids_only=False,
+            self_serve_setup=False):
         
         self.id_list = id_list
         self.from_timestamp = from_timestamp
@@ -89,6 +95,7 @@ class DataLoad:
         self.run_type = run_type
         self.period = period
         self.return_oppids_only = return_oppids_only
+        self.self_serve_setup = self_serve_setup
 
     def get_basic_results(self):
         ds = Dataset.getByNameAndStage('OppDS', None)
@@ -175,7 +182,8 @@ class DataLoad:
                     "error": str(e)
                 }
                 return error_response
-        
+
+        logger.info("Querying MongoDB with criteria: %s", criteria)
         deals_cursor = coll.find(criteria, projection, batch_size=1000)
         deals_count = 0
         
@@ -205,10 +213,11 @@ class DataLoad:
             else:
                 for fld in uipfield:
                     value = values.get(prune_pfx(fld), 'N/A')
+                    fld_params = prune_pfx(fld) if self.self_serve_setup else fld
                     try:
-                        temp[fld] = loads(value)
+                        temp[fld_params] = loads(value)
                     except:
-                        temp[fld] = value
+                        temp[fld_params] = value
 
             
             for f, oppds_field in fieldmap.items():
@@ -235,12 +244,14 @@ class DataLoad:
             ## active_amount Handling
             amount_fld = {'W': 'won_amount',
                               'L': 'lost_amount'}.get(temp['terminal_fate'], 'active_amount')
-            if type(temp[primary_amount_field]) == dict:
-                temp[amount_fld] = temp[primary_amount_field]
-            else:
-                temp[amount_fld] = {}
-                for node in temp['__segs']:
-                    temp[amount_fld][node] = temp[primary_amount_field]
+
+            if not self.self_serve_setup:
+                if type(temp[primary_amount_field]) == dict:
+                    temp[amount_fld] = temp[primary_amount_field]
+                else:
+                    temp[amount_fld] = {}
+                    for node in temp['__segs']:
+                        temp[amount_fld][node] = temp[primary_amount_field]
 
             final_deals.append(temp)
 
@@ -250,6 +261,9 @@ class DataLoad:
     def _get_criteria_strategy(self, boq, eoq):
         if self.run_type == 'chipotle':
             return ChipotleCriteriaBuilder(self, boq=boq, eoq=eoq)
+
+        elif self.self_serve_setup and self.run_type == 'current':
+            return SelfServeCriteriaBuilder(self, boq=boq, eoq=eoq)
 
         elif self.period  and self.run_type == 'current':
             return CurrentQuarterCriteriaBuilder(self, boq=boq, eoq=eoq)
@@ -482,6 +496,7 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             etl_stack = os.environ.get('ETL_STACK')
             period = request.GET.get('period')
             run_type = request.GET.get('run_type', 'chipotle')
+            self_serve_setup = is_true(request.GET.get('self_serve_setup', False))
 
             id_list = request.GET.getlist('id_list', '')
             # if id_list_raw:
@@ -519,7 +534,8 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
                 run_type=run_type,
                 from_timestamp=from_timestamp,
                 changed_fields_only=changed_fields_only,
-                return_oppids_only=return_oppids_only
+                return_oppids_only=return_oppids_only,
+                self_serve_setup=self_serve_setup
             )
 
             # 5. Get Basic Results
