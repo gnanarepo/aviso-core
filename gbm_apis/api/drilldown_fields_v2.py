@@ -20,6 +20,11 @@ from django.views.decorators.csrf import csrf_exempt
 from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
 from gbm_apis.deal_result.result_Utils import deals_results_by_period
 
+from aviso.utils.dateUtils import TimeHorizon
+from utils.misc_utils import prune_pfx
+from gbm_apis.api.data_load import CurrentQuarterCriteriaBuilder
+from utils.mongo_reader import build_mongo_filter
+
 logger = logging.getLogger("aviso-core.%s" % __name__)
 
 
@@ -394,41 +399,103 @@ def drilldown_values_by_period(periods, groups,):
     """
     output = {}
     curr_period = current_period().mnemonic
+    
+    th = TimeHorizon()
+    boq = epoch(th.beginsF).as_xldate()
+    eoq = epoch(th.horizonF).as_xldate()
+
+    ## ETL Database
+    cname=os.environ.get("CNAME", "preprod")
+
+    #uip_data_coll = db[sec_context.name + '.OppDS._results.bookings_rtfm._result']
+    #criteria = {'object.run_time_horizon': 'custom_live'}
+    db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=sec_context.name, db_type='etl', cname=cname)
+    uip_data_coll = db[sec_context.name + '.OppDS._uip._data']
+    
+    criteria = CurrentQuarterCriteriaBuilder(data_load=None, boq=boq, eoq=eoq).get_criteria()
+
+    ds = Dataset.getByNameAndStage('OppDS', None)
+    record_filter = ds.get_model_filter('bookings_rtfm')
+
+    final_query = {
+        "$and": [
+            criteria,
+            build_mongo_filter(record_filter)
+        ]
+    }
+
+    logger.info("Final MongoDB query for drilldown_values_by_period: %s", json.dumps(final_query))
+
+    # Build fieldmap (UI -> DB field name only)
+    fieldmap = {
+        f: prune_pfx(f)
+        for group in groups
+        for f in group
+    }
+
+    # Build projection fields
+    required_fields = set()
+
+    # UI fields → object.values.*
+    for db_field in fieldmap.values():
+        required_fields.add(f"object.values.{db_field}")
+
+    # Always required fields
+    #required_fields.add("object.terminal_date")  
+
+    # Clean
+    required_fields.discard(None)
+
+    # Final projection
+    projection = {field: 1 for field in required_fields}
+    projection["_id"] = 0
 
     for period in periods:
-        imr = deals_results_by_period([period])
+        deals_cursor = uip_data_coll.find(final_query, projection=projection).batch_size(50000)
+        
         if period != curr_period:
             curr_imr = deals_results_by_period([curr_period])
-
+        
         output[period] = {}
         for group in groups:
             group_set = set()
-            for rec in imr.get(period, {}).get("results", {}).values():
+            #period_results = imr.get(period, {}).get("results", {})
+            for rec in deals_cursor:
                 rec_output = []
                 for field in group:
                     try:
-                        if isinstance(rec[field], dict):
-                            rec_output.append([(field, val) for val in set(rec[field].values())])
-                        else:
-                            rec_output.append([(field, rec[field])])
-                    except KeyError:
-                        rec_output.append([(field, "N/A")])
-                group_set |= set(itertools.product(*rec_output))
+                        db_field = fieldmap.get(field, field)
+                        val = rec.get("object", {}).get("values", {}).get(db_field, 'N/A')
 
+                        # clean quotes
+                        if isinstance(val, str):
+                            val = val.strip('"')
+
+                        if isinstance(val, dict):
+                            values = set(val.values()) or {'N/A'}
+                            rec_output.append([(field, v) for v in values])
+                        else:
+                            rec_output.append([(field, val)])
+                    except KeyError:
+                        # this worries me, cause it could mask other issues, but it is the best way to do it
+                        rec_output.append([(field, 'N/A')])
+                group_set |= set(itertools.product(*rec_output))
+                #group_set.add(tuple((fld, rec[fld]) for fld in group))
             if period != curr_period:
-                for rec in curr_imr.get(curr_period, {}).get("results", {}).values():
+                for rec in curr_imr[curr_period]['results'].values():
                     rec_output = []
                     for field in group:
                         try:
                             if isinstance(rec[field], dict):
+                                # TODO fix me, need to like extend for each or some shit
                                 rec_output.append([(field, val) for val in set(rec[field].values())])
                             else:
                                 rec_output.append([(field, rec[field])])
                         except KeyError:
-                            rec_output.append([(field, "N/A")])
+                            # this worries me, cause it could mask other issues, but it is the best way to do it
+                            rec_output.append([(field, 'N/A')])
                     group_set |= set(itertools.product(*rec_output))
-
-            group_name = "|".join(group)
+            group_name = '|'.join(group)
             output[period][group_name] = list(group_set)
-
+    
     return output
