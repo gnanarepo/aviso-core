@@ -1691,7 +1691,7 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
 
         if is_curr_q:
             chip_asof, chip_ck = get_latest_chipotle()
-            if chip_asof and ((chip_asof + buffer_time) > asof or get_results_from_as_of):
+            if not asof or chip_asof and ((chip_asof + buffer_time) > asof or get_results_from_as_of):
                 asof, ck, model = chip_asof, chip_ck, 'bookings_rtfm'
         if ck is None:
             logger.warning('No runs found for period: {}'.format(period))

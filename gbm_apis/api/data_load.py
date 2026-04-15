@@ -57,12 +57,12 @@ class ChipotleCriteriaBuilder(CriteriaBuilder):
 
 class CurrentQuarterCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
-        return {'terminal_date': {'$gte': self.boq}}
+        return {'object.terminal_date': {'$gte': self.boq}}
 
 class PastQuarterCriteriaBuilder(CriteriaBuilder):
     def get_criteria(self):
         return {
-            'terminal_date': {'$gte': self.boq},
+            'object.terminal_date': {'$gte': self.boq},
             'created_date': {'$lte': self.eoq}
         }
 
