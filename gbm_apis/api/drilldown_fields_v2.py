@@ -417,10 +417,11 @@ def drilldown_values_by_period(periods, groups,):
     ds = Dataset.getByNameAndStage('OppDS', None)
     record_filter = ds.get_model_filter('bookings_rtfm')
 
+    converted_mongo_filter = build_mongo_filter(record_filter)
     final_query = {
         "$and": [
             criteria,
-            build_mongo_filter(record_filter)
+            converted_mongo_filter
         ]
     }
 
@@ -454,7 +455,25 @@ def drilldown_values_by_period(periods, groups,):
         deals_cursor = uip_data_coll.find(final_query, projection=projection).batch_size(50000)
         
         if period != curr_period:
-            curr_imr = deals_results_by_period([curr_period])
+            curr_period_details = period_details_by_mnemonic(curr_period) 
+
+            curr_period_begin_xldate = epoch(curr_period_details.begin).as_xldate()
+            curr_period_end_xldate = epoch(curr_period_details.end).as_xldate()
+
+            terminal_date_filter = {
+                "object.terminal_date": {
+                    "$gte": curr_period_begin_xldate,
+                    "$lt": curr_period_end_xldate
+                }
+            }
+            curr_period_query = {
+                "$and": [
+                    terminal_date_filter,
+                    converted_mongo_filter
+                ]
+            }
+
+            curr_imr_cursor = uip_data_coll.find(curr_period_query, projection=projection).batch_size(50000)
         
         output[period] = {}
         for group in groups:
@@ -482,15 +501,23 @@ def drilldown_values_by_period(periods, groups,):
                 group_set |= set(itertools.product(*rec_output))
                 #group_set.add(tuple((fld, rec[fld]) for fld in group))
             if period != curr_period:
-                for rec in curr_imr[curr_period]['results'].values():
+                for rec in curr_imr_cursor:
                     rec_output = []
                     for field in group:
                         try:
+                            db_field = fieldmap.get(field, field)
+                            val = rec.get("object", {}).get("values", {}).get(db_field, 'N/A')
+                            
+                            # clean quotes
+                            if isinstance(val, str):
+                                val = val.strip('"')
+
                             if isinstance(rec[field], dict):
                                 # TODO fix me, need to like extend for each or some shit
-                                rec_output.append([(field, val) for val in set(rec[field].values())])
+                                values = set(val.values()) or {'N/A'}
+                                rec_output.append([(field, v) for v in values])
                             else:
-                                rec_output.append([(field, rec[field])])
+                                rec_output.append([(field, val)])
                         except KeyError:
                             # this worries me, cause it could mask other issues, but it is the best way to do it
                             rec_output.append([(field, 'N/A')])
