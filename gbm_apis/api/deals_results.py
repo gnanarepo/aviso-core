@@ -35,6 +35,7 @@ class DealsResultsAPIView(AvisoCompatibilityMixin, AvisoView):
         force_uip_and_hierarchy = is_true(request.GET.get('force_uip_and_hierarchy', False))
         allow_live = is_true(request.GET.get('allow_live', True))
         return_files_list = is_true(request.GET.get('return_files_list', False))
+        return_chipotle_files_list = is_true(request.GET.get('return_chipotle_files_list', False))
 
         fields = request.GET.getlist('fields', [])
 
@@ -43,14 +44,16 @@ class DealsResultsAPIView(AvisoCompatibilityMixin, AvisoView):
                 self.yield_period_results(periods, include_uip, node,
                                           get_results_from_as_of=get_results_from_as_of,
                                           fields=fields,
-                                          return_files_list=return_files_list),
+                                          return_files_list=return_files_list,
+                                          return_chipotle_files_list=return_chipotle_files_list),
                 status=200, content_type='application/json')
         elif len(periods) == 1:
             return StreamingHttpResponse(
                 self.yield_timestamp_results(periods[0], timestamps, include_uip, node,
                                              get_results_from_as_of=get_results_from_as_of, fields=fields,
                                              force_uip_and_hierarchy=force_uip_and_hierarchy, allow_live=allow_live,
-                                             return_files_list=return_files_list),
+                                             return_files_list=return_files_list,
+                                             return_chipotle_files_list=return_chipotle_files_list),
                 status=200, content_type='application/json')
         else:
             raise Exception("Invalid Request: Multiple periods provided with timestamps.")
@@ -102,7 +105,7 @@ class DealsResultsAPIView(AvisoCompatibilityMixin, AvisoView):
     # --- Helper Generators (Logic kept as-is) ---
 
     def yield_period_results(self, periods, include_uip, node, get_results_from_as_of=0, fields=[], opp_ids=[],
-                             return_files_list=False):
+                             return_files_list=False, return_chipotle_files_list=False):
         yield '{\n'
         for x, period in enumerate(periods):
             if x:
@@ -111,11 +114,13 @@ class DealsResultsAPIView(AvisoCompatibilityMixin, AvisoView):
             yield '%s\n' % json.dumps(deals_results_by_period([period], include_uip=include_uip, node=node,
                                                               get_results_from_as_of=get_results_from_as_of,
                                                               fields=fields,
-                                                              return_files_list=return_files_list)[period])
+                                                              return_files_list=return_files_list,
+                                                              return_chipotle_files_list=return_chipotle_files_list)[period])
         yield '}\n'
 
     def yield_timestamp_results(self, period, timestamps, include_uip, node, get_results_from_as_of=0, fields=[],
-                                opp_ids=[], force_uip_and_hierarchy=False, allow_live=True, return_files_list=False):
+                                opp_ids=[], force_uip_and_hierarchy=False, allow_live=True, return_files_list=False,
+                                return_chipotle_files_list=False):
         changed_deals = []
         yield '{\n'
         for x, timestamp in enumerate(timestamps):
@@ -129,5 +134,6 @@ class DealsResultsAPIView(AvisoCompatibilityMixin, AvisoView):
                                                                  changed_deals=changed_deals,
                                                                  force_uip_and_hierarchy=force_uip_and_hierarchy,
                                                                  allow_live=allow_live,
-                                                                 return_files_list=return_files_list)[timestamp])
+                                                                 return_files_list=return_files_list,
+                                                                 return_chipotle_files_list=return_chipotle_files_list)[timestamp])
         yield '}\n'
