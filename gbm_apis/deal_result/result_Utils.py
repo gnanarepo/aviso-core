@@ -1876,7 +1876,7 @@ def retrieve_deals(model, cache_key, include_uip=True, node=None, get_results_fr
 #deals_results_by_timestamp
 def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, get_results_from_as_of=0, fields=[],
                                opp_ids=[], changed_deals=[], force_uip_and_hierarchy=False, allow_live=True,
-                               return_files_list=False):
+                               return_files_list=False, return_chipotle_files_list=False):
     '''
     Takes a period and a list of timestamps. The individual results are filtered to that period,
     then the latest result without going over that timestamp is returned. Will consider chipotle timestamp
