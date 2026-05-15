@@ -18,7 +18,9 @@ from ..deal_result.splitter_service import ViewGeneratorService
 from ..deal_result.node_service import gimme_node_service
 from ..deal_result.hierarchy_service import CoolerHierarchyService
 
-from aviso.framework.tenant_mongo_resolver import TenantMongoResolver 
+# from aviso.framework.tenant_mongo_resolver import TenantMongoResolver 
+from aviso.framework.connection_factory import ConnectionFactory
+
 
 
 logger = logging.getLogger('gnana.%s' % __name__)
@@ -1662,8 +1664,9 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
     buffer_time = 3 * 60 * 60 * 1000
     
     cname=os.environ.get("CNAME", "preprod")
-    resolver = TenantMongoResolver()
-    cfg = resolver.resolve(sec_context.name, cname=cname, db_type="gbm")
+    # resolver = TenantMongoResolver()
+    # cfg = resolver.resolve(sec_context.name, cname=cname, db_type="gbm")
+    cfg = ConnectionFactory.resolve(sec_context.name, cname=cname, db_type="gbm")
 
     for period in periods:
         results[period] = {}
@@ -1876,7 +1879,7 @@ def retrieve_deals(model, cache_key, include_uip=True, node=None, get_results_fr
 #deals_results_by_timestamp
 def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, get_results_from_as_of=0, fields=[],
                                opp_ids=[], changed_deals=[], force_uip_and_hierarchy=False, allow_live=True,
-                               return_files_list=False):
+                               return_files_list=False, return_chipotle_files_list=False):
     '''
     Takes a period and a list of timestamps. The individual results are filtered to that period,
     then the latest result without going over that timestamp is returned. Will consider chipotle timestamp
@@ -1903,8 +1906,10 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
     qperiod, mperiod, is_curr_q = janky_period_parser(period)
 
     cname=os.environ.get("CNAME", "preprod")
-    resolver = TenantMongoResolver()
-    cfg = resolver.resolve(sec_context.name, cname=cname, db_type="gbm")
+    # resolver = TenantMongoResolver()
+    # cfg = resolver.resolve(sec_context.name, cname=cname, db_type="gbm")
+
+    cfg = ConnectionFactory.resolve(sec_context.name, cname=cname, db_type="gbm")
 
     if get_results_from_as_of and not changed_deals:
         asof, ck = get_latest_daily(qperiod, mperiod)

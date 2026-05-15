@@ -27,7 +27,9 @@ from utils.misc_utils import prune_pfx
 from utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
 from utils.data_load_utils import get_drilldowns, get_dd_list
 
-from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
+# from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
+from aviso.framework.connection_factory import ConnectionFactory
+
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -116,8 +118,13 @@ class DataLoad:
         #db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
         cname=os.environ.get("CNAME", "preprod")
-        db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
-        #print(db)
+        # db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
+        db = ConnectionFactory.get_mongo_db(
+            tenant=self.tenant_name,
+            db_type='etl',
+            cname=cname
+        )
+        # print(db)
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
@@ -195,7 +202,7 @@ class DataLoad:
                 allow_deal = DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
                                                   record_filter) and DataLoad.core_show(deal['object']['history'], boq, eoq)
             else:
-                allow_deal = DataLoad.is_active(deal['object']['history'], boq) and DataLoad.passes_record_filter(deal['object']['extid'],
+                allow_deal = DataLoad.is_active(deal['object']['history'], boq, stage_field_name=stage_field_name) and DataLoad.passes_record_filter(deal['object']['extid'],
                                                                                                 deal['object'][
                                                                                                     'values'],
                                                                                                 record_filter)
@@ -308,8 +315,8 @@ class DataLoad:
         return True
 
     @staticmethod
-    def is_active(data, boq):
-        stage_data = data.get('StageTrans_adj', [])
+    def is_active(data, boq, stage_field_name='StageTrans_adj'):
+        stage_data = data.get(stage_field_name, [])
         if not stage_data:
             return False
         stage_at_start = DataLoad.getasof(stage_data, boq)
