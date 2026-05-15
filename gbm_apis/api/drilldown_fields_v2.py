@@ -17,16 +17,13 @@ from aviso.settings import sec_context
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
-# from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
+from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
 from gbm_apis.deal_result.result_Utils import deals_results_by_period
 
 from aviso.utils.dateUtils import TimeHorizon
 from utils.misc_utils import prune_pfx
 from gbm_apis.api.data_load import CurrentQuarterCriteriaBuilder
 from utils.mongo_reader import build_mongo_filter
-
-from aviso.framework.connection_factory import ConnectionFactory
-
 
 logger = logging.getLogger("aviso-core.%s" % __name__)
 
@@ -194,13 +191,8 @@ def build_global_territory_owners(groups: Iterable[Iterable[str]], period: Optio
     # )
 
     cname = os.environ.get("CNAME", "preprod")
-    # etl_db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=sec_context.name, db_type='etl', cname=cname)
+    etl_db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=sec_context.name, db_type='etl', cname=cname)
 
-    etl_db = ConnectionFactory.get_mongo_db(
-        tenant=sec_context.name,
-        db_type='etl',
-        cname=cname
-    )
     coll = etl_db[sec_context.name + '.OppDS._uip._data']
 
     projection = {
@@ -417,14 +409,7 @@ def drilldown_values_by_period(periods, groups,):
 
     #uip_data_coll = db[sec_context.name + '.OppDS._results.bookings_rtfm._result']
     #criteria = {'object.run_time_horizon': 'custom_live'}
-    # db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=sec_context.name, db_type='etl', cname=cname)
-    
-    db = ConnectionFactory.get_mongo_db(
-        tenant=sec_context.name,
-        db_type='etl',
-        cname=cname
-    )
-
+    db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=sec_context.name, db_type='etl', cname=cname)
     uip_data_coll = db[sec_context.name + '.OppDS._uip._data']
     
     criteria = CurrentQuarterCriteriaBuilder(data_load=None, boq=boq, eoq=eoq).get_criteria()
