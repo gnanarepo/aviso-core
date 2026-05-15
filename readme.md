@@ -13,7 +13,7 @@ Before starting, ensure you meet the following requirements:
 
 1. Locate the `.example.env` file in the project root.
 2. Create a copy of this file and name it `.env`.
-3. Populate the variables in `.env` with your specific credentials and local configurations.
+3. Populate the variables in `.env` with your specific credentials and local configurations..
 
 ```bash
 cp example.env .env
