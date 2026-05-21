@@ -1,4 +1,3 @@
-
 # Local Development Setup Guide
 
 This guide outlines the steps required to set up and run the `aviso-core` project locally.
@@ -107,7 +106,7 @@ You should now be able to successfully hit the APIs at `http://127.0.0.1:8000/`.
 *** Update Wheels (After Code Changes in Aviso-Infra)
 --> bump version in project.toml (version = "0.1.1" <->"0.1.2")
 --> rm -rf build dist *.egg-info
---> python -m build
+--> python3 -m build
 --> Copy the newly created wheels in /wheels folder and move the old<>last wheel to wheels_backup folder
 --> cp ../aviso-infrastructure/dist/aviso-0.1.2-py3-none-any.whl wheels 
 --> mv wheels/aviso-0.1.1-py3-none-any.whl wheels_backup/
