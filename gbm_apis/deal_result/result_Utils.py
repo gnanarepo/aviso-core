@@ -1248,9 +1248,21 @@ def get_individual_results_generator(
 
 
     if cached_records is None:
-        all_results = res_cls.findDocuments(criteria)
-        #print(f"Total records fetched from DB: {len(list(res_cls.findDocuments(criteria)))}")
+        ## NEW FLOW: Connection Factory GBM-DB with Batching and no_cursor_timeout=True
+        cname = os.environ.get("CNAME", "preprod")
+        gbm_db = ConnectionFactory.get_mongo_db(
+            tenant=sec_context.name,
+            db_type='gbm',
+            cname=cname
+        )
+        all_results = gbm_db[res_cls.getCollectionName()].find(
+            criteria,
+            batch_size=500,
+            no_cursor_timeout=True
+        )
 
+        ## Old Flow
+        # all_results = res_cls.findDocuments(criteria)
     else:
         all_results = cached_records
 
