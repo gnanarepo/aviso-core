@@ -5,7 +5,7 @@ import os
 
 from django.http import HttpResponse
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('gnana.%s' % __name__)
 
 
 worker_pool = os.environ.get('WORKER_POOL', None)

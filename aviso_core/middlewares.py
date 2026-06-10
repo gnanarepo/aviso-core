@@ -5,10 +5,10 @@ import uuid
 import logging
 from django.conf import settings
 from django.http import HttpResponse
-from aviso.framework import tenant_holder
+from aviso.framework import tenant_holder, tracer
 from aviso.settings import microservices_user
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('gnana.%s' % __name__)
 
 
 class SecurityContextMiddleware:
@@ -34,11 +34,19 @@ class SecurityContextMiddleware:
         except:
             pass
 
+        # C. Set trace_id — propagate from caller or generate a new one
+        incoming_trace = (
+            request.headers.get("X-Trace-Id") or
+            request.headers.get("X-Request-ID")
+        )
+        trace_id = incoming_trace if incoming_trace else str(uuid.uuid4())
+        tracer.set_trace(trace_id)
+
         ## TODO: Tenant Name Extraction From Browser
         tenant_name = (
-                request.headers.get("X-Tenant-Name") or request.GET.get("tenant_name", "aviso.com")
+            request.headers.get("X-Tenant-Name") or request.GET.get("tenant_name", "aviso.com")
         )
-
+        
         if not tenant_name:
             return HttpResponse(
                     json.dumps({"error": "Missing X-Tenant-Name"}),
@@ -61,7 +69,9 @@ class SecurityContextMiddleware:
         if not internal_api_key or internal_api_key != os.environ.get("INTERNAL_API_KEY", ""):
             logger.warning(f"Unauthorized access attempt to microservice by tenant: {tenant_name}")
             return HttpResponse(content=json.dumps({"error": "Unauthorized"}), status=401, content_type="application/json")
-            
+        
+        logger.info(f"Received request for {request.path} with trace_id: {trace_id} and splunk logs enabled {os.environ.get('SPLUNK_ENABLED', 'False')}")
+
         response = self.get_response(request)
 
         if isinstance(response, dict):
@@ -84,6 +94,9 @@ class SecurityContextMiddleware:
         # --- Legacy Headers (Optional but recommended) ---
         if isinstance(response, HttpResponse) and hasattr(settings, 'SDK_VERSION'):
             response['SDK_VERSION'] = settings.SDK_VERSION
+
+        if isinstance(response, HttpResponse):
+            response['X-Trace-Id'] = trace_id
 
         # =====================================================
         # CLEANUP PHASE
@@ -108,6 +121,8 @@ class SecurityContextMiddleware:
 
             except Exception as e:
                 logger.error("Failed to clean up tenant connections: %s", e)
+            finally:
+                tracer.set_trace(None)
         
         if getattr(response, "streaming", False):
             original_stream = response.streaming_content
