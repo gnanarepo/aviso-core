@@ -8,7 +8,7 @@ from gbm_apis.deal_result.result_Utils import deals_results_by_period, deals_res
 from gbm_apis.framework.baseView import AvisoView
 from gbm_apis.framework.mixins import AvisoCompatibilityMixin
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('gnana.%s' % __name__)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class DealsResultsAPIView(AvisoCompatibilityMixin, AvisoView):

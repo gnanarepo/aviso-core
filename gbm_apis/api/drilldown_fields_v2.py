@@ -28,7 +28,7 @@ from utils.mongo_reader import build_mongo_filter
 from aviso.framework.connection_factory import ConnectionFactory
 
 
-logger = logging.getLogger("aviso-core.%s" % __name__)
+logger = logging.getLogger('gnana.%s' % __name__)
 
 
 @method_decorator(csrf_exempt, name="dispatch")
