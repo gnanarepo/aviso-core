@@ -27,7 +27,9 @@ from utils.misc_utils import prune_pfx
 from utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
 from utils.data_load_utils import get_drilldowns, get_dd_list
 
-from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
+# from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
+from aviso.framework.connection_factory import ConnectionFactory
+
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -42,6 +44,11 @@ class CriteriaBuilder(ABC):
     @abstractmethod
     def get_criteria(self):
         pass
+
+
+class SelfServeCriteriaBuilder(CriteriaBuilder):
+        def get_criteria(self):
+            return {'object.terminal_date': {'$gte': self.boq}}
 
 
 class ChipotleCriteriaBuilder(CriteriaBuilder):
@@ -76,7 +83,8 @@ class DataLoad:
             run_type='chipotle',
             from_timestamp=0,
             changed_fields_only=False,
-            return_oppids_only=False):
+            return_oppids_only=False,
+            self_serve_setup=False):
         
         self.id_list = id_list
         self.from_timestamp = from_timestamp
@@ -89,6 +97,7 @@ class DataLoad:
         self.run_type = run_type
         self.period = period
         self.return_oppids_only = return_oppids_only
+        self.self_serve_setup = self_serve_setup
 
     def get_basic_results(self):
         ds = Dataset.getByNameAndStage('OppDS', None)
@@ -109,8 +118,13 @@ class DataLoad:
         #db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
         cname=os.environ.get("CNAME", "preprod")
-        db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
-        #print(db)
+        # db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
+        db = ConnectionFactory.get_mongo_db(
+            tenant=self.tenant_name,
+            db_type='etl',
+            cname=cname
+        )
+        # print(db)
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
@@ -175,7 +189,8 @@ class DataLoad:
                     "error": str(e)
                 }
                 return error_response
-        
+
+        logger.info("Querying MongoDB with criteria: %s", criteria)
         deals_cursor = coll.find(criteria, projection, batch_size=1000)
         deals_count = 0
         
@@ -187,7 +202,7 @@ class DataLoad:
                 allow_deal = DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
                                                   record_filter) and DataLoad.core_show(deal['object']['history'], boq, eoq)
             else:
-                allow_deal = DataLoad.is_active(deal['object']['history'], boq) and DataLoad.passes_record_filter(deal['object']['extid'],
+                allow_deal = DataLoad.is_active(deal['object']['history'], boq, stage_field_name=stage_field_name) and DataLoad.passes_record_filter(deal['object']['extid'],
                                                                                                 deal['object'][
                                                                                                     'values'],
                                                                                                 record_filter)
@@ -205,10 +220,11 @@ class DataLoad:
             else:
                 for fld in uipfield:
                     value = values.get(prune_pfx(fld), 'N/A')
+                    fld_params = prune_pfx(fld) if self.self_serve_setup else fld
                     try:
-                        temp[fld] = loads(value)
+                        temp[fld_params] = loads(value)
                     except:
-                        temp[fld] = value
+                        temp[fld_params] = value
 
             
             for f, oppds_field in fieldmap.items():
@@ -235,12 +251,14 @@ class DataLoad:
             ## active_amount Handling
             amount_fld = {'W': 'won_amount',
                               'L': 'lost_amount'}.get(temp['terminal_fate'], 'active_amount')
-            if type(temp[primary_amount_field]) == dict:
-                temp[amount_fld] = temp[primary_amount_field]
-            else:
-                temp[amount_fld] = {}
-                for node in temp['__segs']:
-                    temp[amount_fld][node] = temp[primary_amount_field]
+
+            if not self.self_serve_setup:
+                if type(temp[primary_amount_field]) == dict:
+                    temp[amount_fld] = temp[primary_amount_field]
+                else:
+                    temp[amount_fld] = {}
+                    for node in temp['__segs']:
+                        temp[amount_fld][node] = temp[primary_amount_field]
 
             final_deals.append(temp)
 
@@ -250,6 +268,9 @@ class DataLoad:
     def _get_criteria_strategy(self, boq, eoq):
         if self.run_type == 'chipotle':
             return ChipotleCriteriaBuilder(self, boq=boq, eoq=eoq)
+
+        elif self.self_serve_setup and self.run_type == 'current':
+            return SelfServeCriteriaBuilder(self, boq=boq, eoq=eoq)
 
         elif self.period  and self.run_type == 'current':
             return CurrentQuarterCriteriaBuilder(self, boq=boq, eoq=eoq)
@@ -294,8 +315,8 @@ class DataLoad:
         return True
 
     @staticmethod
-    def is_active(data, boq):
-        stage_data = data.get('StageTrans_adj', [])
+    def is_active(data, boq, stage_field_name='StageTrans_adj'):
+        stage_data = data.get(stage_field_name, [])
         if not stage_data:
             return False
         stage_at_start = DataLoad.getasof(stage_data, boq)
@@ -482,6 +503,7 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             etl_stack = os.environ.get('ETL_STACK')
             period = request.GET.get('period')
             run_type = request.GET.get('run_type', 'chipotle')
+            self_serve_setup = is_true(request.GET.get('self_serve_setup', False))
 
             id_list = request.GET.getlist('id_list', '')
             # if id_list_raw:
@@ -519,7 +541,8 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
                 run_type=run_type,
                 from_timestamp=from_timestamp,
                 changed_fields_only=changed_fields_only,
-                return_oppids_only=return_oppids_only
+                return_oppids_only=return_oppids_only,
+                self_serve_setup=self_serve_setup
             )
 
             # 5. Get Basic Results

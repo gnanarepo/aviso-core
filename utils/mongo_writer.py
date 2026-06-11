@@ -14,7 +14,7 @@ from utils.date_utils import (epoch, get_prev_eod, next_period_by_epoch,
 from utils.misc_utils import (BootstrapError, CycleError, is_lead_service,
                               iter_chunks)
 
-logger = logging.getLogger('aviso-core.%s' % __name__)
+logger = logging.getLogger('gnana.%s' % __name__)
 
 
 def _set_run_full_mode_flag(value):
