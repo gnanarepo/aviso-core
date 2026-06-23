@@ -28,7 +28,7 @@ onems = timedelta(milliseconds=1)
 ALL_PERIODS_CACHE = {}
 PRD_STR_CACHE = {}
 ALL_PERIOD_RANGES_CACHE = {}
-logger = logging.getLogger('aviso-core.%s' % __name__)
+logger = logging.getLogger('gnana.%s' % __name__)
 now = lambda: EpochClass().as_datetime()
 
 class EpochClass:

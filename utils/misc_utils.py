@@ -6,7 +6,7 @@ from itertools import chain, combinations
 from aviso.settings import sec_context
 from operator import lt, gt, le, ge, itemgetter
 
-logger = logging.getLogger('aviso-core.%s' % __name__)
+logger = logging.getLogger('gnana.%s' % __name__)
 range_lambdas = {}
 
 CURR_TABLE = {'USD':'$', 'CAD': '$', 'GBP':u'\xa3','JPY':u'\xa5',
