@@ -42,8 +42,8 @@
   "requiresCompatibilities": [
     "FARGATE"
   ],
-  "cpu": "4096",
-  "memory": "32768",
+  "cpu": "16384",
+  "memory": "65536",
   "runtimePlatform": {
     "cpuArchitecture": "X86_64",
     "operatingSystemFamily": "LINUX"
