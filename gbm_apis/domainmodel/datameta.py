@@ -833,23 +833,19 @@ class Dataset(Model):
                 except Exception as e:
                     logger.exception(e)
                 logger.info("etl_key is %s and gbm_key is %s" % (etl_key, gbm_key))
-            if get_cached and etl_ds_attrs and gbm_ds_attrs and (not get_from_db):
-                try:
-                    ds_attrs = get_ds_config(json.loads(etl_ds_attrs), json.loads(gbm_ds_attrs))
-                    logger.info('got dataset config from global redis cache 1'+str(ds.params['general'].keys()))
-                except:
-                    ds_attrs = get_from_shell()
+                if get_cached and etl_ds_attrs and gbm_ds_attrs and (not get_from_db):
+                    try:
+                        ds_attrs = get_ds_config(json.loads(etl_ds_attrs), json.loads(gbm_ds_attrs))
+                        logger.info('domainmodel-> datameta: got dataset config from global redis cache ')
+                    except:
+                        ds_attrs = get_from_shell()
             else:
-                if get_from_db:
-                    logger.info("Getting latest dataset config from DB")
-                    ds_attrs = get_from_db()
-                    # usefull for debugging in case of issue. remove after few days.
-                    # from deepdiff import DeepDiff
-                    # diff = DeepDiff(get_from_shell(), get_from_db(), ignore_order=True)
-                    # print("DIFF IS ", diff)
-                else:
-                    logger.info("Getting latest dataset config from shell")
-                    ds_attrs = get_from_shell()
+                logger.info("domainmodel-> datameta: Getting latest dataset config from DB")
+                ds_attrs = get_from_db()
+                # usefull for debugging in case of issue. remove after few days.
+                # from deepdiff import DeepDiff
+                # diff = DeepDiff(get_from_shell(), get_from_db(), ignore_order=True)
+                # print("DIFF IS ", diff)
             ds = Dataset()
             ds.name = name
             ds.decode(ds_attrs)

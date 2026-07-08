@@ -10,11 +10,13 @@ from aviso.utils.dateUtils import   TimeHorizon, current_period,datetime2xl,get_
 
 from aviso.utils.dateUtils import get_quarter_from_cache_key,epoch
 
+
 from ..deal_result.results import ModelRunDetails,IndividualResult,CompressedIndividualResultModel,RevenueIndividualResult,GroupResult
 from gbm_apis.domainmodel.model import Model
 from utils.config_utils import config_pattern_expansion
 from django.http.response import HttpResponseNotFound
 from aviso.domainmodel.datameta import DSClass
+
 import pymongo
 import sys
 import traceback
@@ -23,6 +25,8 @@ import json
 import os
 import time
 import memcache
+
+from utils.read_utils import get_oppds_config
 from gbm_apis.analyticengine.forecast2 import Forecast2
 from gbm_apis.analyticengine.unborn_base import UnbornBaseModel
 from gbm_apis.analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
@@ -251,7 +255,7 @@ class Dataset(DSClass):
                     raise
 
     @classmethod
-    def get_from_micro(cls, name, stage=None, target='_data', full_config=True, get_cached=True):
+    def get_from_micro(cls, name, stage=None, target='_data', full_config=True, get_cached=True, get_from_db=False):
         etl_stage = sec_context.get_microservice_config('etl_data_service').get('sandbox')
         gbm_stage = sec_context.get_microservice_config('gbm_service').get('sandbox')
         def get_ds_config(etl_ds_attrs, gbm_ds_attrs):
@@ -287,28 +291,40 @@ class Dataset(DSClass):
             except:
                 pass
             return ds_attrs
+
+        def get_from_db():
+            tenant_name = sec_context.details.name
+            etl_ds_attrs = get_oppds_config(tenant_name, 'etl')
+            gbm_ds_attrs = get_oppds_config(tenant_name, 'gbm')
+            ds_attrs = get_ds_config(etl_ds_attrs, gbm_ds_attrs)
+            return ds_attrs
+
+
         try:
             ds_attrs = {}
             etl_ds_attrs = {}
             gbm_ds_attrs = {}
-            etl_key = ":".join([CNAME, sec_context.name, name,
-                                etl_stage if etl_stage else 'None', target, str(full_config),"etl"])
-            gbm_key = ":".join([CNAME, sec_context.name, name,
-                                gbm_stage if gbm_stage else 'None', target, str(full_config),"gbm"])
-            try:
-                etl_ds_attrs = global_cache.get(etl_key)
-                gbm_ds_attrs = global_cache.get(gbm_key)
-            except Exception as e:
-                logger.exception(e)
-            logger.info("etl_key is %s and gbm_key is %s" % (etl_key, gbm_key))
-            if get_cached and etl_ds_attrs and gbm_ds_attrs:
+
+            if not get_from_db:
+                etl_key = ":".join([CNAME, sec_context.name, name,
+                                    etl_stage if etl_stage else 'None', target, str(full_config),"etl"])
+                gbm_key = ":".join([CNAME, sec_context.name, name,
+                                    gbm_stage if gbm_stage else 'None', target, str(full_config),"gbm"])
                 try:
-                    ds_attrs = get_ds_config(json.loads(etl_ds_attrs), json.loads(gbm_ds_attrs))
-                    logger.info('got dataset config from global redis cache')
-                except:
-                    ds_attrs = get_from_shell()
+                    etl_ds_attrs = global_cache.get(etl_key)
+                    gbm_ds_attrs = global_cache.get(gbm_key)
+                except Exception as e:
+                    logger.exception(e)
+                logger.info("etl_key is %s and gbm_key is %s" % (etl_key, gbm_key))
+                if get_cached and etl_ds_attrs and gbm_ds_attrs:
+                    try:
+                        ds_attrs = get_ds_config(json.loads(etl_ds_attrs), json.loads(gbm_ds_attrs))
+                        logger.info('got dataset config from global redis cache')
+                    except:
+                        ds_attrs = get_from_shell()
             else:
-                ds_attrs = get_from_shell()
+                logger.info("deal_result-> dataset: Getting latest dataset config from DB")
+                ds_attrs = get_from_db()
             ds = Dataset(attrs=None)
             ds.name = name
             ds.decode(ds_attrs)
@@ -320,8 +336,8 @@ class Dataset(DSClass):
 
     @classmethod
     def getByNameAndStage(cls, name, stage=None, target='_data', full_config=True, get_cached=True,
-                          load_configs=False):
-        ds = cls.get_from_micro(name, stage, target, full_config, get_cached) if (
+                          load_configs=False, get_from_db=False):
+        ds = cls.get_from_micro(name, stage, target, full_config, get_cached, get_from_db) if (
             sec_context.is_etl_service_enabled) else None
         if not ds:
             ds = cls.getByName(name, get_from_ms=False)
