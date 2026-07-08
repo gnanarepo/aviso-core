@@ -100,7 +100,7 @@ class DataLoad:
         self.self_serve_setup = self_serve_setup
 
     def get_basic_results(self):
-        ds = Dataset.getByNameAndStage('OppDS', None)
+        ds = Dataset.getByNameAndStage('OppDS', None, get_from_db=True)
         use_core_show = ds.models['common'].config.get('fastlane_config', {}).get('use_core_show')
         viewgen_config = ds.models['common'].config.get('viewgen_config', {})
         primary_amount_field = ds.models['common'].config.get('fastlane_config', {}).get('primary_amount_field', 'as_of_Amount_USD')
@@ -388,7 +388,7 @@ class RevenueSchedule:
 
     def revenue_schedule(self):
         basic_results = self.basic_results
-        oppds = Dataset.getByNameAndStage(name='OppDS')
+        oppds = Dataset.getByNameAndStage(name='OppDS', get_from_db=True)
         rev_schedule_config = oppds.models['common'].config.get('rev_schedule_config', {})
         drilldown = rev_schedule_config.get('drilldown', 'Revenue')
         close_date_fld = rev_schedule_config.get('close_date_fld', 'CloseDate')
