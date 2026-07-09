@@ -9,6 +9,7 @@ WORKDIR /build
 
 # Install build dependencies
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
        git \
        build-essential \
@@ -44,6 +45,7 @@ WORKDIR /app
 
 # Install runtime libs
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
        libpq5 \
        libmemcached11 \
