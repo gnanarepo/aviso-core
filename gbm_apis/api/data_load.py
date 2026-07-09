@@ -134,7 +134,6 @@ class DataLoad:
         for f in uipfield:
             oppds_field = prune_pfx(f)
             fieldmap.update({f: oppds_field})
-
         required_fields = set()
 
         #UIP fields
@@ -490,11 +489,27 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
     Converted to AvisoView for consistency.
     """
 
-    http_method_names = ['get']
+    http_method_names = ['get', 'post']
     restrict_to_roles = {AvisoView.Role.Gnacker}
     as_json = False
 
+    def post(self, request, *args, **kwargs):
+        try:
+            body = json.loads(request.body.decode('utf-8'))
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON in request body"}, status=400)
+
+        id_list = body.get('id_list', [])
+        if not isinstance(id_list, list):
+            return JsonResponse({"error": "id_list must be a list"}, status=400)
+
+        return self._handle(request, id_list)
+
     def get(self, request, *args, **kwargs):
+        id_list = request.GET.getlist('id_list', '')
+        return self._handle(request, id_list)
+    
+    def _handle(self, request, id_list, *args, **kwargs):
         try:
             tenant_name = request.headers.get("X-Tenant-Name")
             stack = os.environ.get('STACK')
@@ -505,7 +520,7 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             run_type = request.GET.get('run_type', 'chipotle')
             self_serve_setup = is_true(request.GET.get('self_serve_setup', False))
 
-            id_list = request.GET.getlist('id_list', '')
+            # id_list = request.GET.getlist('id_list', '')
             # if id_list_raw:
             #     id_list = [x.strip() for x in id_list_raw.split(',') if x.strip()]
             # else:
