@@ -7,6 +7,7 @@ WORKDIR /build
 
 # Install build dependencies (only what is needed to compile deps like lxml, cryptography etc.)
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
        build-essential \
        libpq-dev \
@@ -45,6 +46,7 @@ WORKDIR /app
 
 # Install runtime-only system libraries
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
        libpq5 \
        libmemcached11 \

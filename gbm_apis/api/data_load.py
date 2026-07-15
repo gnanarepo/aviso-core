@@ -27,7 +27,9 @@ from utils.misc_utils import prune_pfx
 from utils.result_utils import generate_appannie_dummy_recs, generate_expiration_date_renewal_rec, generate_revenue_recs
 from utils.data_load_utils import get_drilldowns, get_dd_list
 
-from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
+# from aviso.framework.tenant_mongo_resolver import TenantMongoResolver
+from aviso.framework.connection_factory import ConnectionFactory
+
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
@@ -116,8 +118,13 @@ class DataLoad:
         #db = client[self.tenant_name.split('.')[0] + '_db_' + self.etl_stack]
 
         cname=os.environ.get("CNAME", "preprod")
-        db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
-        #print(db)
+        # db = TenantMongoResolver().ms_connection_mongo_client_db(tenant=self.tenant_name, db_type='etl', cname=cname)
+        db = ConnectionFactory.get_mongo_db(
+            tenant=self.tenant_name,
+            db_type='etl',
+            cname=cname
+        )
+        # print(db)
         # Fetch uipfields from OppDS Data
         coll = db[sec_context.name + '.OppDS._uip._data']
         criteria_builder = self._get_criteria_strategy(boq=boq, eoq=eoq)
@@ -127,7 +134,6 @@ class DataLoad:
         for f in uipfield:
             oppds_field = prune_pfx(f)
             fieldmap.update({f: oppds_field})
-
         required_fields = set()
 
         #UIP fields
@@ -195,7 +201,7 @@ class DataLoad:
                 allow_deal = DataLoad.passes_record_filter(deal['object']['extid'], deal['object']['values'],
                                                   record_filter) and DataLoad.core_show(deal['object']['history'], boq, eoq)
             else:
-                allow_deal = DataLoad.is_active(deal['object']['history'], boq) and DataLoad.passes_record_filter(deal['object']['extid'],
+                allow_deal = DataLoad.is_active(deal['object']['history'], boq, stage_field_name=stage_field_name) and DataLoad.passes_record_filter(deal['object']['extid'],
                                                                                                 deal['object'][
                                                                                                     'values'],
                                                                                                 record_filter)
@@ -308,8 +314,8 @@ class DataLoad:
         return True
 
     @staticmethod
-    def is_active(data, boq):
-        stage_data = data.get('StageTrans_adj', [])
+    def is_active(data, boq, stage_field_name='StageTrans_adj'):
+        stage_data = data.get(stage_field_name, [])
         if not stage_data:
             return False
         stage_at_start = DataLoad.getasof(stage_data, boq)
@@ -483,11 +489,27 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
     Converted to AvisoView for consistency.
     """
 
-    http_method_names = ['get']
+    http_method_names = ['get', 'post']
     restrict_to_roles = {AvisoView.Role.Gnacker}
     as_json = False
 
+    def post(self, request, *args, **kwargs):
+        try:
+            body = json.loads(request.body.decode('utf-8'))
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON in request body"}, status=400)
+
+        id_list = body.get('id_list', [])
+        if not isinstance(id_list, list):
+            return JsonResponse({"error": "id_list must be a list"}, status=400)
+
+        return self._handle(request, id_list)
+
     def get(self, request, *args, **kwargs):
+        id_list = request.GET.getlist('id_list', '')
+        return self._handle(request, id_list)
+    
+    def _handle(self, request, id_list, *args, **kwargs):
         try:
             tenant_name = request.headers.get("X-Tenant-Name")
             stack = os.environ.get('STACK')
@@ -498,7 +520,7 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
             run_type = request.GET.get('run_type', 'chipotle')
             self_serve_setup = is_true(request.GET.get('self_serve_setup', False))
 
-            id_list = request.GET.getlist('id_list', '')
+            # id_list = request.GET.getlist('id_list', '')
             # if id_list_raw:
             #     id_list = [x.strip() for x in id_list_raw.split(',') if x.strip()]
             # else:

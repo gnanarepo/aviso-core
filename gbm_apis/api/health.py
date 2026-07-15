@@ -34,7 +34,7 @@ class HealthCheckView(View):
                 health_status["checks"]["database"] = "failed"
                 health_status["status"] = "degraded"
 
-            logger.info("Health check passed")
+            # logger.info("Health check passed")
             status_code = 200 if health_status["status"] == "healthy" else 503
 
             return JsonResponse(health_status, status=status_code)
