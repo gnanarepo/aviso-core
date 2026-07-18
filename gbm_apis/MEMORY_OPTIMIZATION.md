@@ -20,6 +20,17 @@
 
 **`basic_results` API fixes are fully deferred** — to be taken up after `deals_results` is tested end-to-end. See separate section at the bottom.
 
+### Latency / DB round-trip fixes (separate from memory — see dedicated section below)
+
+| Fix | Description | Status | Impact |
+|-----|-------------|--------|--------|
+| Fix H | Versioned hierarchy: batch ancestor lookups (one full-hierarchy load per distinct ts) | ✅ DONE | Removes ~(records × drilldowns × splits) `$graphLookup` round-trips |
+| Fix I | Reuse the view generator across periods/models (load 8 hierarchies once) | 🔴 PENDING | Removes N×8 hierarchy loads per multi-period request |
+| Fix J | Increase result-cursor `batch_size` (2000 → 10000) | 🔴 PENDING | ~39 → ~8 `getMore` round-trips per 80K read |
+| Fix K | Replace deprecated `.count()` in `validate_results` with `count_documents` | 🔴 PENDING | Removes a full-collection count per request |
+| Fix L | Explicit session for the `no_cursor_timeout` cursor | 🔴 PENDING | Stability: avoids 30-min idle cursor kill |
+| Fix M | Serve versioned lookups from the as-of in-memory table (drop per-ts DB load) | ⚠️ NEEDS SIGN-OFF | Removes all versioned hierarchy DB calls — **semantic change** |
+
 ---
 
 ## ✅ Completed Fixes
@@ -382,6 +393,96 @@ For 80K deals the pre-computed file is 200–600 MB, held while the view layer s
 **Fix:** Add a streaming variant to `gnana_storage` that uses boto3 streaming download + incremental JSON/CSV parsing, yielding deal records one at a time. Integrate with the existing streaming yield loop in `yield_period_results`.
 
 **Lower priority:** The S3 cache path is less frequently hit than the live/chipotle path for current-quarter requests. Address after Fix B and Fix D.
+
+---
+
+## Latency / DB Round-Trip Optimizations — `/gbm/deals_results`
+
+**Problem (separate from memory):** For a tenant with ~80K opportunities the request makes **hundreds of thousands of MongoDB round-trips**. On an in-VPC ECS container each is sub-millisecond, so it hides; from a laptop over VPN each is tens of milliseconds, so the same request takes 20+ minutes. The dominant term is the per-record versioned hierarchy lookup.
+
+**Round-trip breakdown (one `retrieve_deals`, 76,824-record `custom_live` run, 8 drilldowns):**
+
+| Source | Calls |
+|--------|-------|
+| Setup (dataset/model/run-config) | handful |
+| `validate_results` — `findDocuments` + full `.count()` | 2 |
+| View-generator build — 8 hierarchies × `$graphLookup` | 8 (× per period/model) |
+| Result cursor — 76,824 ÷ `batch_size=2000` | ~39 `getMore` |
+| **Per-record versioned `get_ancestors`** — records × drilldowns × splits | **~615,000** `$graphLookup` (the killer) |
+
+---
+
+### Fix H — Batch versioned hierarchy ancestor lookups ✅ DONE
+
+**File:** [deal_result/hierarchy_service.py:693](deal_result/hierarchy_service.py#L693) (`CoolerHierarchyService.get_ancestors`)
+
+**Problem:** In versioned mode `ts = versioned_ts(record)` is the deal's close date (non-None for won deals, i.e. essentially every deal). The versioned branch issued one recursive `$graphLookup` **per node, per drilldown, per split, per record** — ~615K round-trips for an 80K run. Meanwhile the full hierarchy was already loaded into memory at init but only the *unversioned* path used it.
+
+**Change applied:** Load the entire hierarchy as-of a given `ts` **once**, cache it keyed by `ts` in `self.ancestor_cache`, and serve every node for that `ts` from memory.
+
+```python
+# BEFORE — one $graphLookup per node
+anc_dict = {rec['node']: rec['ancestors']
+            for rec in self.fetch_ancestors(as_of=ts, nodes=[node], db=db)}
+return anc_dict[node] + [node]
+
+# AFTER — one full-hierarchy load per distinct ts, then in-memory
+table = self.ancestor_cache.get(ts)
+if table is None:
+    table = self.load_ancestors_from_db(ts)   # full hierarchy as-of ts
+    self.ancestor_cache[ts] = table
+return table[node] + [node]                    # fresh list per call; fallback unchanged
+```
+
+**Why output is identical:** In `fetch_ancestors` the `nodes` filter only decides which documents *enter* the pipeline; each node's `ancestors` chain is built by `$graphLookup` from its own `$parent` links under `restrictSearchWithMatch: criteria` (the time filter), independent of which other nodes are matched. So `table[node]` == the old `nodes=[node]` result. `load_ancestors_from_db(ts)` is exactly the full (unfiltered) form of the same query. `+ [node]` still returns a fresh list, and the `'unmapped'`/`'not_in_hier'` KeyError fallback is unchanged.
+
+**Round-trips:** ~615,000 → **number of distinct close-date `ts` values** (day-granular, so small and bounded). The unversioned path (`ts is None`) is untouched.
+
+**Cache scope:** `self.ancestor_cache` is a per-instance dict; the service is rebuilt per request ([viewgen_service.py:41](deal_result/viewgen_service.py#L41)), so it is discarded at request end — hierarchy edits between requests are always re-read from the DB, never served stale.
+
+**Memory note:** caches one `{node: [ancestors]}` table per distinct `ts` (freed at request end). Bounded by hierarchy size × distinct close dates. If a tenant ever has sub-day close-date granularity (high-cardinality `ts`), this trades round-trips for memory; revisit Fix M in that case.
+
+**Verification:** diff the JSON response for a versioned tenant (e.g. nutanix.com `custom_live`) before/after — deal count, seg keys, and field values must be identical; DB op count and wall-clock drop sharply.
+
+---
+
+### Fix I — Reuse the view generator across periods/models 🔴 PENDING
+
+**File:** [deal_result/result_Utils.py:1246](deal_result/result_Utils.py#L1246)
+
+`CoolerViewGeneratorService` is rebuilt inside every `retrieve_deals`/period, and each build reloads all 8 hierarchies from the DB (~18s over a high-latency link — the two back-to-back batches of 8 `versioned mode` log lines). Memoize the view generator per request keyed by `hier_asof` (= `time_horizon.as_of`) so the hierarchy loads happen once. Must key by `hier_asof` (not globally) so different as-of runs still get correct hierarchies. Output-preserving.
+
+---
+
+### Fix J — Increase result-cursor `batch_size` 🔴 PENDING
+
+**File:** [deal_result/result_Utils.py:1276](deal_result/result_Utils.py#L1276)
+
+Bump `batch_size=2000` → `10000`. 76,824 docs = ~8 `getMore` round-trips instead of ~39. One-line, output-preserving; disproportionately helps high-latency (local) runs. Keep an eye on per-batch memory (Fix C projection already keeps docs small).
+
+---
+
+### Fix K — Replace deprecated `.count()` in `validate_results` 🔴 PENDING
+
+**File:** [deal_result/result_Utils.py:970](deal_result/result_Utils.py#L970), via [aviso/framework/mongodb.py:151](../../aviso-infrastructure/aviso/framework/mongodb.py#L151)
+
+`res_cls.find_count(...)` uses the deprecated `.count(criteria)` (full-collection count). Switch to `count_documents`. Note the warning-only intent is preserved; this is just correctness + a lighter query.
+
+---
+
+### Fix L — Explicit session for the `no_cursor_timeout` cursor 🔴 PENDING
+
+**File:** [deal_result/result_Utils.py:1273](deal_result/result_Utils.py#L1273)
+
+PyMongo warns that `no_cursor_timeout=True` without an explicit session can still time out after 30 minutes. For long local runs, open a session (`with gbm_db.client.start_session() as s:` and pass `session=s` to `.find(...)`) and close it after iteration. Stability, not speed.
+
+---
+
+### Fix M — Serve versioned lookups from the as-of in-memory table ⚠️ NEEDS PRODUCT SIGN-OFF
+
+**File:** [deal_result/hierarchy_service.py:693](deal_result/hierarchy_service.py#L693)
+
+Fix H still does one full-hierarchy load per distinct `ts`. If the hierarchy is stable across the query's time window, versioned lookups could be served from the single as-of table (`self.hier_with_ancestors`, loaded at init) with **zero** per-`ts` DB calls. **This is a semantic change** — it resolves ancestors as-of the run rather than as-of each deal's close date — so it can change output for deals whose owner's hierarchy position changed between close date and run time. Do **not** ship without product confirmation that as-of-run resolution is acceptable.
 
 ---
 
