@@ -926,6 +926,7 @@ def get_results_objects(
         exec_time=None,
         drilldowns=None,
         get_results_from_as_of=None,
+        id_list=[]
 ):
     ds_inst = Dataset.getByNameAndStage(ds_name, stage_name)
     if not ds_inst:
@@ -946,9 +947,14 @@ def get_results_objects(
     time_horizon = get_time_horizon(as_of=run_config.as_of, begins=run_config.begins, horizon=run_config.horizon)
     model_inst = ds_inst.get_model_instance(model_name, time_horizon, drilldowns)
     criteria = {'object.run_time_horizon': res_cls.run_time_horizon}
+
+    if id_list:
+        criteria = {'$and': [criteria, {'object.extid': {'$in': id_list}}]}
+
     if get_results_from_as_of:
         criteria = {'$and': [criteria, {'last_modified_time': {'$gte': get_results_from_as_of}}]}
-    logger.info("criteria %s", criteria )
+    
+    logger.info("Deal Results API Criteria: %s", criteria)
     return res_cls, model_inst, ds_inst, criteria
 
 
@@ -1135,7 +1141,8 @@ def get_individual_results_generator(
         cached_records=None,
         prune_nulls=False,
         get_results_from_as_of=None,
-        custom_fields = []
+        custom_fields = [],
+        id_list = []
 ):
     """
     ds_name: name of dataset as string
@@ -1175,6 +1182,7 @@ def get_individual_results_generator(
         stage_name=stage_name,
         allowed_dimensions=allowed_dimensions,
         get_results_from_as_of=get_results_from_as_of,
+        id_list=id_list
     )
     time_horizon = model_inst.time_horizon
     validate_results(res_cls, model_inst)
@@ -1255,9 +1263,17 @@ def get_individual_results_generator(
             db_type='gbm',
             cname=cname
         )
+        _projection = {
+            'object.extid': 1,
+            'object.uipfield': 1,
+            'object.dimensions': 1,
+            'object.results': 1,
+            '_id': 0,
+        }
         all_results = gbm_db[res_cls.getCollectionName()].find(
             criteria,
-            batch_size=500,
+            _projection,
+            batch_size=2000,
             no_cursor_timeout=True
         )
 
@@ -1650,7 +1666,8 @@ def get_latest_daily(qperiod, mperiod, timestamp=None):
         return None, None
 
 def deals_results_by_period(periods, include_uip=True, node=None, get_results_from_as_of=0, fields=[], opp_ids=[],
-                            return_files_list=False, return_chipotle_files_list=False):
+                            return_files_list=False, return_chipotle_files_list=False,
+                            id_list=[]):
 
 
     '''
@@ -1758,7 +1775,10 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
             # TODO: make this return a dict, instead of list of dicts, splits will be fixed later
             results[period]['results'] = retrieve_deals(model, ck, include_uip, node,
                                                         get_results_from_as_of=get_results_from_as_of,
-                                                        fields=fields_to_fetch)
+                                                        fields=fields_to_fetch,
+                                                        id_list=id_list)
+
+            print("Length of results for period {} is {}".format(period, len(results[period]['results'].keys())))
 
             # if the tenant has revenue schedule
             if rev_schedule_config.get('prd_rev_schedule', False):
@@ -1821,7 +1841,8 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
 
 
 
-def retrieve_deals(model, cache_key, include_uip=True, node=None, get_results_from_as_of=0, fields = []):
+def retrieve_deals(model, cache_key, include_uip=True, node=None,
+                    get_results_from_as_of=0, fields = [], id_list = []):
     #with a given model and cache key, grab the results via the results generator
     tenant = sec_context.details
     tc = tenant.get_config(category='forecast', config_name='tenant')
@@ -1862,7 +1883,8 @@ def retrieve_deals(model, cache_key, include_uip=True, node=None, get_results_fr
             drilldowns=dd_arg,
             prune_nulls=prune_nulls,
             get_results_from_as_of=get_results_from_as_of,
-            custom_fields = fields
+            custom_fields = fields,
+            id_list = id_list
         ))
 
     except Exception as e:
@@ -1930,7 +1952,20 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
             chip_asof, chip_ck = get_latest_chipotle()
             if chip_asof and ((chip_asof + buffer_time) > asof or get_results_from_as_of):
                 asof, ck, model = chip_asof, chip_ck, 'bookings_rtfm'
-                changed_deals.extend(list(retrieve_deals(model, ck, include_uip, node, get_results_from_as_of=get_results_from_as_of, fields=fields).keys()))
+                # Only need IDs here — fetch extids with a lightweight projection
+                # instead of a full retrieve_deals which loads all deal data
+                _res_cls, _, _, _id_criteria = get_results_objects(
+                    ds_name='OppDS', model_name=model, cache_key=ck,
+                    get_results_from_as_of=get_results_from_as_of
+                )
+                _gbm_db = ConnectionFactory.get_mongo_db(
+                    tenant=sec_context.name, db_type='gbm', cname=cname
+                )
+                _id_cursor = _gbm_db[_res_cls.getCollectionName()].find(
+                    _id_criteria, {'object.extid': 1, '_id': 0},
+                    batch_size=5000, no_cursor_timeout=True
+                )
+                changed_deals.extend([rec['object']['extid'] for rec in _id_cursor])
 
 
     for timestamp in timestamps:
