@@ -62,4 +62,16 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["gunicorn", "aviso_core.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "900"]
+# Workers = 2*vCPU + 1 = 33 (gunicorn's standard sync formula for 16 vCPU), timeout 1200s.
+# sync workers (process-isolated) preserve legacy thread-safety assumptions.
+# --worker-tmp-dir /dev/shm and stderr error logging are Fargate-specific adjustments.
+# Access logging is intentionally disabled to avoid CloudWatch volume/cost.
+CMD ["gunicorn", "aviso_core.wsgi:application", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "33", \
+     "--timeout", "1200", \
+     "--max-requests", "100", \
+     "--max-requests-jitter", "20", \
+     "--keep-alive", "0", \
+     "--worker-tmp-dir", "/dev/shm", \
+     "--error-logfile", "-"]
