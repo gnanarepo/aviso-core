@@ -841,6 +841,9 @@ class Dataset(Model):
                         except:
                             logger.info('domainmodel-> datameta: got dataset config from shell ')
                             ds_attrs = get_from_shell()
+                else:
+                    logger.info('domainmodel-> datameta: got dataset config from shell ')
+                    ds_attrs = get_from_shell()
             else:
                 logger.info("domainmodel-> datameta: Getting latest dataset config from DB")
                 ds_attrs = get_from_db()
