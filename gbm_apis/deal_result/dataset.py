@@ -316,14 +316,18 @@ class Dataset(DSClass):
                 except Exception as e:
                     logger.exception(e)
                 logger.info("etl_key is %s and gbm_key is %s" % (etl_key, gbm_key))
+                get_cached = False # Disable caching for now. will remove this once pr for config_from_db is ready to be released
                 if get_cached and etl_ds_attrs and gbm_ds_attrs:
                     try:
                         ds_attrs = get_ds_config(json.loads(etl_ds_attrs), json.loads(gbm_ds_attrs))
-                        logger.info('got dataset config from global redis cache')
+                        logger.info('aviso-core->deal_result-> dataset: got dataset config from global redis cache')
                     except:
                         ds_attrs = get_from_shell()
+                else:
+                    logger.info('aviso-core->deal_result-> dataset: got dataset config from shell')
+                    ds_attrs = get_from_shell()
             else:
-                logger.info("deal_result-> dataset: Getting latest dataset config from DB")
+                logger.info("aviso-core->deal_result-> dataset: Getting latest dataset config from DB")
                 ds_attrs = get_from_db()
             ds = Dataset(attrs=None)
             ds.name = name
