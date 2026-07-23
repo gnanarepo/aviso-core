@@ -26,7 +26,7 @@ import os
 import time
 import memcache
 
-from utils.read_utils import get_oppds_config
+from utils.db_read_utils import get_oppds_config
 from gbm_apis.analyticengine.forecast2 import Forecast2
 from gbm_apis.analyticengine.unborn_base import UnbornBaseModel
 from gbm_apis.analyticengine.unborn_base_zerodawn import UnbornBaseModelZeroDawn
@@ -304,6 +304,9 @@ class Dataset(DSClass):
             ds_attrs = {}
             etl_ds_attrs = {}
             gbm_ds_attrs = {}
+            if get_from_db and name not in ["OppDS"]:
+                # most of the case name is OppDS this is outlier condition.
+                get_from_db = False
 
             if not get_from_db:
                 etl_key = ":".join([CNAME, sec_context.name, name,

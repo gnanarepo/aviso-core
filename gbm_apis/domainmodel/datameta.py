@@ -19,7 +19,7 @@ from utils import GnanaError, forwardmap, update_dict
 from utils.config_utils import config_pattern_expansion
 from utils.date_utils import datetime2epoch, get_a_date_time_as_float_some_how
 from utils.math_utils import excelToFloat
-from utils.read_utils import get_oppds_config
+from utils.db_read_utils import get_oppds_config
 from aviso.utils import is_true
 
 from gbm_apis.analyticengine.forecast2 import Forecast2
@@ -822,6 +822,9 @@ class Dataset(Model):
             ds_attrs = {}
             etl_ds_attrs = {}
             gbm_ds_attrs = {}
+            if get_from_db and name not in ["OppDS"]:
+                # most of the case name is OppDS this is outlier condition.
+                get_from_db = False
             if not get_from_db:
                 etl_key = ":".join([CNAME, sec_context.name, name,
                                 etl_stage if etl_stage else 'None', target, str(full_config),"etl"])
