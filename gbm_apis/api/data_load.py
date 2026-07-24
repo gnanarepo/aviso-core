@@ -437,6 +437,11 @@ class RevenueSchedule:
             basic_results = self.get_results_list(basic_results_dict)
             extids_in_basic_results = [record['extid'] for record in basic_results]
             exluded_extids = [extid for extid in extids_before_rev_schedule if extid not in extids_in_basic_results]
+            
+            for element in basic_results:
+                if element['extid'] not in extids_before_rev_schedule:
+                    element['is_delete'] = False
+
             for opp_id in exluded_extids:
                 basic_results.append({'extid': opp_id,
                                       'is_delete': True})
