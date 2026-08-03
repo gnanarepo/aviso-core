@@ -1,13 +1,10 @@
 """Resolve the security context for an incoming request.
 
-Three ways in, tried in this order:
+Two ways in, tried in this order:
 
 1. a Django session — a user who logged in through the SDK or the browser;
 2. an ``Access-Token`` header — service-to-service calls, the token is bound to
-   one tenant through the AuthorizationToken table;
-3. the legacy ``Internal-Api-Key`` header — one static secret shared by every
-   caller, with the tenant taken from a request header. Removed once the
-   remaining callers move off it.
+   one tenant through the AuthorizationToken table.
 
 Ported from service-infrastructure/aviso/framework/middleware.py.
 """

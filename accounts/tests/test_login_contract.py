@@ -87,7 +87,7 @@ class AnonymousAccessTest(TestCase):
 
     @mock.patch.dict(os.environ, {'INTERNAL_API_KEY': 'the-real-key'})
     def test_the_static_key_is_no_longer_accepted(self):
-        """AV-25956 acceptance criterion: holding the key is not enough."""
+        """Holding the shared secret is not enough to reach the APIs."""
         response = self.client.get('/gbm/basic_results?period=2026Q3',
                                    headers={'internal-api-key': 'the-real-key',
                                             'x-tenant-name': 'aviso.com'})
