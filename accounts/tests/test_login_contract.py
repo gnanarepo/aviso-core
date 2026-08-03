@@ -4,6 +4,7 @@ Every assertion here mirrors something the deployed SDK actually does, so a
 change that breaks login shows up as a failing test instead of as a shell that
 cannot connect. Mongo and Postgres are mocked; nothing here needs a stack.
 """
+import os
 import re
 from unittest import mock
 
@@ -82,6 +83,14 @@ class AnonymousAccessTest(TestCase):
     def test_business_endpoint_rejects_a_wrong_key(self):
         response = self.client.get('/gbm/basic_results?period=2026Q3',
                                    headers={'internal-api-key': 'not-the-key'})
+        self.assertEqual(response.status_code, 401)
+
+    @mock.patch.dict(os.environ, {'INTERNAL_API_KEY': 'the-real-key'})
+    def test_the_static_key_is_no_longer_accepted(self):
+        """Holding the shared secret is not enough to reach the APIs."""
+        response = self.client.get('/gbm/basic_results?period=2026Q3',
+                                   headers={'internal-api-key': 'the-real-key',
+                                            'x-tenant-name': 'aviso.com'})
         self.assertEqual(response.status_code, 401)
 
     @override_settings()
