@@ -396,6 +396,7 @@ class RevenueSchedule:
         if rev_schedule_config.get('prd_rev_schedule', False):
             # convert basic_results to dict format
             extids_before_rev_schedule = [record['extid'] for record in basic_results]
+            full_records_by_extid = {record['extid']: record for record in basic_results}
             basic_results_dict = self.get_results_dict(basic_results)
             basic_results_dict = self.rev_schedule_by_period(rev_schedule_field, basic_results_dict)
             rev_period = self.period if self.period else current_period(a_datetime=epoch().as_datetime()).mnemonic
@@ -443,8 +444,10 @@ class RevenueSchedule:
                     element['is_delete'] = False
 
             for opp_id in exluded_extids:
-                basic_results.append({'extid': opp_id,
-                                      'is_delete': True})
+                stub = dict(full_records_by_extid.get(opp_id, {}))
+                stub['extid'] = opp_id
+                stub['is_delete'] = True
+                basic_results.append(stub)
 
         if basic_results:
             return basic_results
