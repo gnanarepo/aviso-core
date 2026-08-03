@@ -78,24 +78,16 @@ WSGI_APPLICATION = 'aviso_core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# Django's own tables (sessions, auth, accounts) must live in a store that is
-# shared by every task: the service runs several ECS tasks behind one ALB, so a
-# per-container sqlite file would strand each login on the task that created it.
-DJANGO_DB_URL = os.environ.get('DJANGO_DB_URL') or os.environ.get('PG_DB_CONNECTION_URL')
-
-if DJANGO_DB_URL:
-    import dj_database_url
-
-    DATABASES = {'default': dj_database_url.parse(DJANGO_DB_URL)}
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
+}
 
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+# Signed into the cookie: several tasks run behind one ALB and none of them
+# owns a session store.
+SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
 
 
 # if DEBUG:
@@ -120,8 +112,6 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
-
-AUTH_USER_MODEL = 'accounts.User'
 
 AUTHENTICATION_BACKENDS = (
     'accounts.backends.SessionMongoBackend',
@@ -162,10 +152,6 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'static'
 
-# The SDK package avisosdk downloads. AVISO_APPS names the apps that ship an
-# sdk/ tree; the version is written by `manage.py preparesdk` at container start
-# and stamped on every response by SecurityContextMiddleware, which is where
-# avisosdk reads it from.
 AVISO_APPS = os.environ.get('AVISO_APPS', 'aviso_core')
 
 APP_PATH_DIRS = {
