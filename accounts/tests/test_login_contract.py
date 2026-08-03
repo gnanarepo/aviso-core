@@ -7,7 +7,7 @@ cannot connect. Mongo and Postgres are mocked; nothing here needs a stack.
 import re
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 
 
 class FakePk:
@@ -29,7 +29,8 @@ class FakeUser:
         self.user_timeout = 30
         self.domain = username.rsplit('@', 1)[1]
         self.bson_id = 'deadbeef'
-        self.roles = {'gnacker': {}}
+        # GnanaUser.roles is a set, and AvisoView intersects it with a set
+        self.roles = {'gnacker', 'all-users'}
         self.last_login = None
         self.saved = False
         self._meta = self
@@ -138,3 +139,57 @@ class LoginTest(TestCase):
 
     def test_whoami_needs_a_session(self):
         self.assertEqual(self.client.get('/account/whoAmI').status_code, 401)
+
+    def test_login_survives_csrf_the_way_the_sdk_does_it(self):
+        """The SDK fetches /csrfform, then posts the token back as X-CSRFToken.
+
+        The default test client skips CSRF entirely, so without this the login
+        tests prove nothing about the check the real SDK has to pass.
+        """
+        user = FakeUser()
+        self._patch_backend(user)
+        self._patch_form_lookups()
+
+        client = Client(enforce_csrf_checks=True)
+        form = client.get('/csrfform', secure=True).content.decode()
+        token = re.search("value='(.*)'", form).group(1)
+
+        response = client.post('/account/login',
+                               {'username': 'tester@aviso.com',
+                                'password': 'secret'},
+                               secure=True,
+                               headers={'x-csrftoken': token,
+                                        'referer': 'https://testserver/'})
+
+        self.assertEqual(response.status_code, 200, response.content)
+
+
+class AccessTokenTest(TestCase):
+    """Service-to-service calls carry a token bound to one tenant."""
+
+    def _patch_token(self, tenant_info):
+        resolver = mock.patch('accounts.context._resolve_token',
+                              return_value=tenant_info)
+        self.addCleanup(resolver.stop)
+        resolver.start()
+
+        service_user = mock.patch('accounts.context._load_service_user',
+                                  return_value=FakeUser('svc@aviso.com'))
+        self.addCleanup(service_user.stop)
+        service_user.start()
+
+    def test_unknown_token_is_rejected(self):
+        self._patch_token(None)
+        response = self.client.get('/gbm/basic_results?period=2026Q3',
+                                   headers={'access-token': 'nope'})
+        self.assertEqual(response.status_code, 401)
+
+    def test_tenant_comes_from_the_token_not_the_header(self):
+        self._patch_token({'tenant': 'from-token.com',
+                           'source_tenant': 'from-token.com'})
+        with mock.patch('accounts.context.sec_context.set_context') as set_context:
+            self.client.get('/gbm/basic_results?period=2026Q3',
+                            headers={'access-token': 'good',
+                                     'x-tenant-name': 'someone-elses.com'})
+
+        self.assertEqual(set_context.call_args.args[1], 'from-token.com')
