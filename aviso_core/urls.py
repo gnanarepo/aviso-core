@@ -26,4 +26,6 @@ logger = logging.getLogger(f'gnana.{__name__}')
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('gbm/', include('gbm_apis.urls')),
+    path('sdk/', include('sdk.urls')),
+    path('', include('accounts.urls')),
 ]
