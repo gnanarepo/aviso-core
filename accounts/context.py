@@ -7,7 +7,7 @@ Three ways in, tried in this order:
    one tenant through the AuthorizationToken table;
 3. the legacy ``Internal-Api-Key`` header — one static secret shared by every
    caller, with the tenant taken from a request header. Removed once the
-   remaining callers move off it (AV-25956, phase 4).
+   remaining callers move off it.
 
 Ported from service-infrastructure/aviso/framework/middleware.py.
 """
