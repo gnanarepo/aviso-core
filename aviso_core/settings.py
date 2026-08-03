@@ -38,11 +38,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'gbm_apis',
+    'accounts',
+    'sdk',
     'rest_framework',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -75,12 +78,24 @@ WSGI_APPLICATION = 'aviso_core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Django's own tables (sessions, auth, accounts) must live in a store that is
+# shared by every task: the service runs several ECS tasks behind one ALB, so a
+# per-container sqlite file would strand each login on the task that created it.
+DJANGO_DB_URL = os.environ.get('DJANGO_DB_URL') or os.environ.get('PG_DB_CONNECTION_URL')
+
+if DJANGO_DB_URL:
+    import dj_database_url
+
+    DATABASES = {'default': dj_database_url.parse(DJANGO_DB_URL)}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 
 # if DEBUG:
@@ -105,6 +120,13 @@ DATABASES = {
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
+
+AUTH_USER_MODEL = 'accounts.User'
+
+AUTHENTICATION_BACKENDS = (
+    'accounts.backends.SessionMongoBackend',
+    'accounts.backends.SessionSAMLBackend',
+)
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -137,7 +159,26 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'static'
+
+# The SDK package avisosdk downloads. AVISO_APPS names the apps that ship an
+# sdk/ tree; the version is written by `manage.py preparesdk` at container start
+# and stamped on every response by SecurityContextMiddleware, which is where
+# avisosdk reads it from.
+AVISO_APPS = os.environ.get('AVISO_APPS', 'aviso_core')
+
+APP_PATH_DIRS = {
+    'gbm_apis': str(BASE_DIR / 'gbm_apis'),
+}
+
+SDK_VERSION_FILE_NAME = '%s_SDK_VERSION' % AVISO_APPS
+
+try:
+    with open(BASE_DIR / SDK_VERSION_FILE_NAME) as _version_file:
+        SDK_VERSION = _version_file.read().strip()
+except OSError:
+    SDK_VERSION = 'NOT_DEFINED'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
