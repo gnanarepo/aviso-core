@@ -13,7 +13,6 @@ Ported from service-infrastructure/aviso/framework/middleware.py.
 """
 import json
 import logging
-import os
 import threading
 import time
 
@@ -134,22 +133,6 @@ def from_token(request, auth_token):
     return tenant_info['tenant']
 
 
-def from_internal_api_key(request, internal_api_key):
-    """Legacy path: one shared secret, tenant supplied by the caller."""
-    if internal_api_key != os.environ.get('INTERNAL_API_KEY', ''):
-        return None
-
-    tenant_name = (request.headers.get('X-Tenant-Name')
-                   or request.GET.get('tenant_name', 'aviso.com'))
-    sec_context.set_context(user_name=microservices_user,
-                            tenant_name=tenant_name,
-                            login_tenant_name=tenant_name,
-                            login_user_name=microservices_user,
-                            switch_type='tenant',
-                            csv_version_info={})
-    return tenant_name
-
-
 def resolve(request):
     """Return (tenant_name, how) or (None, None) when the caller is anonymous."""
     if is_authenticated(getattr(request, 'user', None)):
@@ -164,11 +147,5 @@ def resolve(request):
         if tenant_name:
             return tenant_name, 'token'
         return None, None
-
-    internal_api_key = request.headers.get('Internal-Api-Key')
-    if internal_api_key:
-        tenant_name = from_internal_api_key(request, internal_api_key)
-        if tenant_name:
-            return tenant_name, 'key'
 
     return None, None

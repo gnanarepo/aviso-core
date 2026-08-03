@@ -17,11 +17,6 @@ class AvisoCompatibilityMixin:
         if not hasattr(request, 'params'):
             request.params = request.GET.copy()
 
-        # --- 2. AUTH BYPASS (The "Loophole") ---
-        # If we are local, disable the strict login check in the parent AvisoView
-        if settings.DEBUG:
-            self.login_required = False
-
         # --- 3. EXECUTE PARENT VIEW ---
         # This calls the next class in the chain (AvisoView or View)
         response = super().dispatch(request, *args, **kwargs)
