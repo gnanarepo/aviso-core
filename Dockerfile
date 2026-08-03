@@ -58,8 +58,15 @@ COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 # Copy application code
 COPY --chown=appuser:appuser . /app
 
+# COPY --chown sets ownership on the copied files but leaves /app itself owned
+# by root, so the SDK package and its version file could not be written.
+RUN chmod +x /app/docker-entrypoint.sh \
+    && mkdir -p /app/static \
+    && chown -R appuser:appuser /app
+
 USER appuser
 
 EXPOSE 8000
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["gunicorn", "aviso_core.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "900"]
