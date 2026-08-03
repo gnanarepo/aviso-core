@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.http import HttpResponse
 
 
@@ -9,7 +8,6 @@ class AvisoCompatibilityMixin:
     Features:
     1. Shim Input: Adds 'request.params' (required by legacy baseView).
     2. Shim Output: Converts 'dict' responses to 'HttpResponse' (prevents Middleware crash).
-    3. Dev Mode: Bypasses AvisoView's login check if settings.DEBUG is True.
     """
 
     def dispatch(self, request, *args, **kwargs):
