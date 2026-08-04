@@ -295,3 +295,39 @@ class LoginSwitchByPassCall(LoginAjax, Switch):
         if failure:
             return failure
         return self.perform_switch(post_data.get('tenant'), request)
+
+
+class TenantEndpoint(View):
+    """``/tenant/<name>/endpoint/microservices_info`` — where the other services live.
+
+    ``get_micro_service_shells()`` asks this of every service it connects to, and
+    builds the etl shell only if the answer is non-empty
+    (python-sdk basic.py:779-782). Without it a tenant pointed at this service
+    loses ``shell.etl`` silently.
+
+    Only ``microservices_info`` is served. The endpoint it is ported from
+    (service-infrastructure tenantmanager.py:746) hands back any credential map
+    decrypted, which is a wider door than this service needs.
+    """
+
+    http_method_names = ['get']
+    endpoint_served = 'microservices_info'
+
+    def get(self, request, tenant_name=None, endpoint_name=None, *args, **kwargs):
+        if not is_authenticated(request.user):
+            return _json({'success': False, 'message': 'Not authenticated'}, status=401)
+
+        if sec_context.name != tenant_name.lower():
+            return _json({'error': 'Unauthorized to get end point information'},
+                         status=403)
+
+        if endpoint_name != self.endpoint_served:
+            return _json({'error': 'Connector config not found'}, status=404)
+
+        tenant = sec_context.details
+        if not tenant.credmap_exist(endpoint_name):
+            # Empty rather than the 404 the original returns: a 404 raises inside
+            # get_micro_service_shells(), and its blanket except resets shell.gbm
+            # back to the app server. An empty answer only skips the etl shell.
+            return _json({}, status=200)
+        return JsonResponse(tenant.get_credentials(endpoint_name))

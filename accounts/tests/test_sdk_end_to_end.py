@@ -12,7 +12,10 @@ import avisosdk
 from django.core.management import call_command
 from django.test import LiveServerTestCase, override_settings
 
-from accounts.tests.test_login_contract import FakeUser
+from accounts.tests.test_login_contract import FakeTenant, FakeUser
+
+MICROSERVICES = {'etl_data_service': {'host': 'https://etl-ms.example.com',
+                                      'source_tenant': 'aviso.com'}}
 
 
 class SdkLoginTest(LiveServerTestCase):
@@ -44,11 +47,15 @@ class SdkLoginTest(LiveServerTestCase):
         # `name` is reserved in the Mock constructor, so it has to be assigned
         app_user = mock.Mock(account_locked=False)
         app_user.name = 'tester'
-        for target in ('aviso.domainmodel.tenant.Tenant.getByName',
-                       'aviso.domainmodel.app.User.getUserByLogin'):
-            patcher = mock.patch(target, return_value=app_user)
-            self.addCleanup(patcher.stop)
-            patcher.start()
+        patcher = mock.patch('aviso.domainmodel.app.User.getUserByLogin',
+                             return_value=app_user)
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+        tenant = mock.patch('aviso.domainmodel.tenant.Tenant.getByName',
+                            return_value=FakeTenant({'microservices_info': MICROSERVICES}))
+        self.addCleanup(tenant.stop)
+        tenant.start()
 
     def test_connect_sdk_downloads_the_package(self):
         shell = avisosdk.connect_sdk(self.live_server_url)
@@ -75,3 +82,28 @@ class SdkLoginTest(LiveServerTestCase):
 
         self.assertEqual(first['username'], second['username'])
         self.assertEqual(second['current_tenant'], 'aviso.com')
+
+    def test_the_shell_method_that_gates_the_etl_shell(self):
+        """python-sdk basic.py:779 makes exactly this call on the gbm shell.
+
+        Not the URL — the packaged shell method, because both halves have to
+        line up: a tenant() that builds the right request and a service that
+        answers it. A falsy answer here is what silently costs shell.etl.
+        """
+        shell = avisosdk.connect_sdk(self.live_server_url)
+        shell.login_internal('tester@aviso.com', 'secret')
+
+        endpoints = shell.tenant('get_endpoint', endpoint='microservices_info')
+
+        self.assertEqual(endpoints, MICROSERVICES)
+
+    def test_the_shell_survives_the_calls_it_makes_without_a_server(self):
+        """Shell.__init__ and the async poller call these before anything else."""
+        shell = avisosdk.connect_sdk(self.live_server_url)
+        shell.login_internal('tester@aviso.com', 'secret')
+
+        self.assertEqual(shell.tenant(), 'aviso.com')
+        # avisosdk calls .lower() on this while polling an async job
+        self.assertEqual(shell.tenant('get_flag', category='Datadog',
+                                      config_name='enabled', default='True'),
+                         'True')

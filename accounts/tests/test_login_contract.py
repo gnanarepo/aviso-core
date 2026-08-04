@@ -53,6 +53,23 @@ class FakeUser:
         return True
 
 
+class FakeTenant:
+    """The tenant document sec_context.details resolves to."""
+
+    def __init__(self, credentials=None, name='aviso.com'):
+        self.name = name
+        self.credentials = credentials or {}
+
+    def credmap_exist(self, cred_map_name):
+        return cred_map_name in self.credentials
+
+    def get_credentials(self, cred_map_name):
+        return self.credentials[cred_map_name]
+
+    def get_config(self, category, config_name, default=None):
+        return default
+
+
 class CsrfFormTest(TestCase):
 
     def test_token_is_readable_by_the_sdk(self):
@@ -162,6 +179,80 @@ class LoginTest(TestCase):
                                         'referer': 'https://testserver/'})
 
         self.assertEqual(response.status_code, 200, response.content)
+
+
+class TenantEndpointTest(TestCase):
+    """``/tenant/<name>/endpoint/microservices_info``.
+
+    get_micro_service_shells() asks this of every service it connects to and
+    builds the etl shell only when the answer is non-empty
+    (python-sdk basic.py:779-782), so an empty or failing answer here costs the
+    caller ``shell.etl`` without any error.
+    """
+
+    MICROSERVICES = {'etl_data_service': {'host': 'https://etl-ms.example.com',
+                                          'source_tenant': 'aviso.com'}}
+
+    def _login(self, credentials):
+        user = FakeUser()
+        for target in ('authenticate', 'get_user'):
+            patcher = mock.patch(
+                'accounts.backends.SessionMongoBackend.%s' % target,
+                return_value=user)
+            self.addCleanup(patcher.stop)
+            patcher.start()
+
+        tenant = mock.patch('aviso.domainmodel.tenant.Tenant.getByName',
+                            return_value=FakeTenant(credentials))
+        self.addCleanup(tenant.stop)
+        tenant.start()
+
+        app_user = mock.patch('aviso.domainmodel.app.User.getUserByLogin',
+                              return_value=mock.Mock(account_locked=False))
+        self.addCleanup(app_user.stop)
+        app_user.start()
+
+        self.client.post('/account/login',
+                         {'username': 'tester@aviso.com', 'password': 'secret'})
+
+    def test_needs_a_session(self):
+        response = self.client.get('/tenant/aviso.com/endpoint/microservices_info')
+        self.assertEqual(response.status_code, 401)
+
+    def test_answers_the_call_that_gates_the_etl_shell(self):
+        self._login({'microservices_info': self.MICROSERVICES})
+
+        response = self.client.get('/tenant/aviso.com/endpoint/microservices_info')
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json(), self.MICROSERVICES)
+
+    def test_another_tenant_is_refused(self):
+        self._login({'microservices_info': self.MICROSERVICES})
+
+        response = self.client.get('/tenant/someone-else.com/endpoint/microservices_info')
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_no_other_credential_map_is_served(self):
+        """The endpoint this is ported from hands back any map, decrypted."""
+        self._login({'microservices_info': self.MICROSERVICES,
+                     'salesforce': {'password': 'do-not-serve-this'}})
+
+        response = self.client.get('/tenant/aviso.com/endpoint/salesforce')
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(b'do-not-serve-this', response.content)
+
+    def test_an_unconfigured_tenant_gets_an_empty_answer(self):
+        """Empty, not 404: a 404 raises inside get_micro_service_shells(), whose
+        blanket except would drop shell.gbm back to the app server."""
+        self._login({})
+
+        response = self.client.get('/tenant/aviso.com/endpoint/microservices_info')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {})
 
 
 class AccessTokenTest(TestCase):
