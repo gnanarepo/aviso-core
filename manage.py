@@ -11,6 +11,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# aviso.settings builds gnana_storage at import time from USE_S3; without this it
+# falls back to GnanaFileStorage, which has no daily-results support at all.
+# setdefault (after load_dotenv) so an explicit USE_S3 in the env still wins.
+os.environ.setdefault("USE_S3", "True")
+
 pyschema_spec = importlib.util.find_spec("pyschema")
 
 if pyschema_spec and pyschema_spec.submodule_search_locations:
