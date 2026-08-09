@@ -48,6 +48,11 @@ class PatchedZipImporter(zipimport.zipimporter):
 
 zipimport.zipimporter = PatchedZipImporter
 
+# aviso.settings builds gnana_storage at import time from USE_S3; without this it
+# falls back to GnanaFileStorage, which has no daily-results support at all.
+# setdefault so an explicit USE_S3 in the environment still wins.
+os.environ.setdefault("USE_S3", "True")
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "aviso_core.settings")
 
 from django.core.wsgi import get_wsgi_application

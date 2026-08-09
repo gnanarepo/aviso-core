@@ -19,6 +19,7 @@ from utils import GnanaError, forwardmap, update_dict
 from utils.config_utils import config_pattern_expansion
 from utils.date_utils import datetime2epoch, get_a_date_time_as_float_some_how
 from utils.math_utils import excelToFloat
+from utils.db_read_utils import get_oppds_config
 from aviso.utils import is_true
 
 from gbm_apis.analyticengine.forecast2 import Forecast2
@@ -771,7 +772,9 @@ class Dataset(Model):
         return existing_dataset_value
 
     @classmethod
-    def get_from_micro(cls, name, stage=None, target='_data', full_config=True, get_cached=True):
+    def get_from_micro(cls, name, stage=None, target='_data', full_config=True, get_cached=True, get_from_db=False):
+
+
         etl_stage = sec_context.get_microservice_config('etl_data_service').get('sandbox')
         gbm_stage = sec_context.get_microservice_config('gbm_service').get('sandbox')
         def get_ds_config(etl_ds_attrs, gbm_ds_attrs):
@@ -807,29 +810,50 @@ class Dataset(Model):
             except:
                 pass
             return ds_attrs
+        def get_from_db():
+            tenant_name = sec_context.details.name
+            etl_ds_attrs = get_oppds_config(tenant_name, 'etl')
+            gbm_ds_attrs = get_oppds_config(tenant_name, 'gbm')
+            ds_attrs = get_ds_config(etl_ds_attrs, gbm_ds_attrs)
+            return ds_attrs
+
+    
         try:
             ds_attrs = {}
             etl_ds_attrs = {}
             gbm_ds_attrs = {}
-            etl_key = ":".join([CNAME, sec_context.name, name,
-                             etl_stage if etl_stage else 'None', target, str(full_config),"etl"])
-            gbm_key = ":".join([CNAME, sec_context.name, name,
-                             gbm_stage if gbm_stage else 'None', target, str(full_config),"gbm"])
-            try:
-                etl_ds_attrs = global_cache.get(etl_key)
-                gbm_ds_attrs = global_cache.get(gbm_key)
-            except Exception as e:
-                logger.exception(e)
-            logger.info("etl_key is %s and gbm_key is %s" % (etl_key, gbm_key))
-            get_cached = False # Disable caching for now. will remove this once pr for config_from_db is ready to be released
-            if get_cached and etl_ds_attrs and gbm_ds_attrs:
+            if get_from_db and name not in ["OppDS"]:
+                # most of the case name is OppDS this is outlier condition.
+                get_from_db = False
+            if not get_from_db:
+                etl_key = ":".join([CNAME, sec_context.name, name,
+                                etl_stage if etl_stage else 'None', target, str(full_config),"etl"])
+                gbm_key = ":".join([CNAME, sec_context.name, name,
+                                gbm_stage if gbm_stage else 'None', target, str(full_config),"gbm"])
                 try:
-                    ds_attrs = get_ds_config(json.loads(etl_ds_attrs), json.loads(gbm_ds_attrs))
-                    logger.info('got dataset config from global redis cache')
-                except:
+                    etl_ds_attrs = global_cache.get(etl_key)
+                    gbm_ds_attrs = global_cache.get(gbm_key)
+                except Exception as e:
+                    logger.exception(e)
+                logger.info("etl_key is %s and gbm_key is %s" % (etl_key, gbm_key))
+                get_cached = False # Disable caching for now. will remove this once pr for config_from_db is ready to be released
+                if get_cached and etl_ds_attrs and gbm_ds_attrs and (not get_from_db):
+                        try:
+                            ds_attrs = get_ds_config(json.loads(etl_ds_attrs), json.loads(gbm_ds_attrs))
+                            logger.info('domainmodel-> datameta: got dataset config from global redis cache ')
+                        except:
+                            logger.info('domainmodel-> datameta: got dataset config from shell ')
+                            ds_attrs = get_from_shell()
+                else:
+                    logger.info('domainmodel-> datameta: got dataset config from shell ')
                     ds_attrs = get_from_shell()
             else:
-                ds_attrs = get_from_shell()
+                logger.info("domainmodel-> datameta: Getting latest dataset config from DB")
+                ds_attrs = get_from_db()
+                # usefull for debugging in case of issue. remove after few days.
+                # from deepdiff import DeepDiff
+                # diff = DeepDiff(get_from_shell(), get_from_db(), ignore_order=True)
+                # print("DIFF IS ", diff)
             ds = Dataset()
             ds.name = name
             ds.decode(ds_attrs)
@@ -839,8 +863,8 @@ class Dataset(Model):
 
     @classmethod
     def getByNameAndStage(cls, name, stage=None, target='_data', full_config=True, get_cached=True,
-                          load_configs=False):
-        ds = cls.get_from_micro(name, stage, target, full_config, get_cached) if (
+                          load_configs=False, get_from_db=False):
+        ds = cls.get_from_micro(name, stage, target, full_config, get_cached, get_from_db) if (
             sec_context.is_etl_service_enabled) else None
         if not ds:
             ds = cls.getByName(name, get_from_ms=False)

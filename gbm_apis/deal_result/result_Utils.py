@@ -927,7 +927,7 @@ def get_results_objects(
         drilldowns=None,
         get_results_from_as_of=None,
 ):
-    ds_inst = Dataset.getByNameAndStage(ds_name, stage_name)
+    ds_inst = Dataset.getByNameAndStage(ds_name, stage_name, get_from_db=True)
     if not ds_inst:
         raise GnanaError("dataset=%s not found!" % ds_name)
     if model_name not in ds_inst.models:
@@ -1534,7 +1534,7 @@ def get_individual_result_runs(inputs, **kwargs):
         horizon_month_mnemonic = inputs.get('horizon_month_mnemonic', [])
 
     ds = Dataset.getByNameAndStage(kwargs.get('dataset'),
-                                   stage)
+                                   stage, get_from_db=True)
     if not ds:
         logger.exception("dataset %s stage %s is not there" % (kwargs.get('dataset'), stage))
         return HttpResponseNotFound()
@@ -1737,7 +1737,7 @@ def deals_results_by_period(periods, include_uip=True, node=None, get_results_fr
         fields_to_fetch = None
 
         if ck.startswith('live') or not if_exists:
-            oppds = Dataset.getByNameAndStage(name='OppDS')
+            oppds = Dataset.getByNameAndStage(name='OppDS', get_from_db=True)
             win_score_config = oppds.models['common'].config.get('win_score_config', {})
             rev_schedule_config = oppds.models['common'].config.get('rev_schedule_config', {})
             drilldown = rev_schedule_config.get('drilldown', 'Revenue')
@@ -1825,7 +1825,7 @@ def retrieve_deals(model, cache_key, include_uip=True, node=None, get_results_fr
     #with a given model and cache key, grab the results via the results generator
     tenant = sec_context.details
     tc = tenant.get_config(category='forecast', config_name='tenant')
-    ds = Dataset.getByNameAndStage(name='OppDS')
+    ds = Dataset.getByNameAndStage(name='OppDS', get_from_db=True)
 
     uips = ds.params['general']['uipfield']
     if 'req_uipfield' in ds.params['general'].keys():
@@ -1972,7 +1972,7 @@ def deals_results_by_timestamp(period, timestamps, include_uip=True, node=None, 
             if_exists = False
 
         if ck.startswith('live') or not if_exists:
-            oppds = Dataset.getByNameAndStage(name='OppDS')
+            oppds = Dataset.getByNameAndStage(name='OppDS', get_from_db=True)
             win_score_config = oppds.models['common'].config.get('win_score_config', {})
 
             fields_to_fetch = fields if ck.startswith('live') else None
