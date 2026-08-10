@@ -72,6 +72,14 @@ class SdkLoginTest(LiveServerTestCase):
         me = shell.api('/account/whoAmI', None)
         self.assertEqual(me['username'], 'tester@aviso.com')
 
+    def test_timezone_local_does_not_need_the_legacy_shell(self):
+        """shellDateUtils reaches this through shell.set_local_timezone(),
+        which only the legacy shell has — avisosdk.Shell does not."""
+        shell = avisosdk.connect_sdk(self.live_server_url)
+
+        self.assertTrue(shell.timezone('local'))
+        self.assertEqual(shell._tz_preference, 'local')
+
     def test_the_session_is_reused_across_calls(self):
         """One login, several calls — the cookie has to keep working."""
         shell = avisosdk.connect_sdk(self.live_server_url)

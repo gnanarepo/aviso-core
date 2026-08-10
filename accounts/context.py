@@ -27,7 +27,9 @@ from accounts.session_utils import (CSV_VERSION_INFO, LOGIN_TENANT_NAME,
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
-TOKEN_CACHE_TTL = 3600
+# Short on purpose: nothing tells this process that a token was revoked, so the
+# TTL is the whole revocation window, multiplied by the number of workers.
+TOKEN_CACHE_TTL = 60
 
 _service_user = None
 _service_user_lock = threading.Lock()
@@ -74,10 +76,16 @@ def _load_service_user(user_part):
         if _service_user is None:
             from aviso.domainmodel.app import User as AppUser
             from aviso.models import GnanaUser
-            sec_context.set_context(user_part, ADMIN_DOMAIN, ADMIN_DOMAIN,
-                                    login_user_name=user_part,
-                                    switch_type='tenant')
-            app_user = AppUser.getUserByLogin(microservices_user)
+            try:
+                sec_context.set_context(user_part, ADMIN_DOMAIN, ADMIN_DOMAIN,
+                                        login_user_name=user_part,
+                                        switch_type='tenant')
+                app_user = AppUser.getUserByLogin(microservices_user)
+            except Exception:
+                # A Mongo blip here used to escape the middleware as a 500,
+                # which with DEBUG on renders the caller's token in the page.
+                logger.exception('Service user lookup failed')
+                return None
             if not app_user:
                 return None
             _service_user = GnanaUser(app_user)
