@@ -4,10 +4,13 @@ Every assertion here mirrors something the deployed SDK actually does, so a
 change that breaks login shows up as a failing test instead of as a shell that
 cannot connect. Mongo and Postgres are mocked; nothing here needs a stack.
 """
+import json
 import re
 from unittest import mock
 
 from django.test import Client, TestCase, override_settings
+
+from gbm_apis.framework.baseView import ValidationError as GnanaValidationError
 
 
 class FakePk:
@@ -162,6 +165,71 @@ class LoginTest(TestCase):
                                         'referer': 'https://testserver/'})
 
         self.assertEqual(response.status_code, 200, response.content)
+
+
+class LoginFailureTest(TestCase):
+    """The ways login can fail have to reach the client as JSON, not as a 500."""
+
+    def _patch_form(self, side_effect=None):
+        patcher = mock.patch(
+            'gbm_apis.framework.baseView.GnanaAuthenticationForm.is_valid',
+            side_effect=side_effect)
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    def test_a_locked_account_is_a_401(self):
+        """baseView raises its own ValidationError, a plain Exception.
+
+        Django's full_clean() only catches django.core.exceptions.ValidationError,
+        so this one escapes is_valid() and would surface as a 500 with a
+        traceback. avisosdk greps the message for 'locked'.
+        """
+        self._patch_form(side_effect=GnanaValidationError('User Account Locked!'))
+
+        response = self.client.post('/account/login',
+                                    {'username': 'tester@aviso.com',
+                                     'password': 'secret'})
+
+        self.assertEqual(response.status_code, 401)
+        self.assertIn('locked', response.json()['message'].lower())
+
+    def test_loginswitchbypass_without_a_tenant_is_a_400(self):
+        """perform_switch() does `'@' in tenant`, so None was a TypeError —
+        raised after the login had already handed out a session."""
+        response = self.client.post('/loginswitchbypass',
+                                    data=json.dumps({'username': 'tester@aviso.com',
+                                                     'password': 'secret'}),
+                                    content_type='application/json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('sessionid', response.cookies)
+
+
+class SessionExpiryTest(TestCase):
+    """Sessions have to idle out; the service serves no IP challenge."""
+
+    def test_expiry_comes_from_the_user_timeout(self):
+        user = FakeUser()
+        user.user_timeout = 45
+        for target in ('authenticate', 'get_user'):
+            patcher = mock.patch(
+                'accounts.backends.SessionMongoBackend.%s' % target,
+                return_value=user)
+            self.addCleanup(patcher.stop)
+            patcher.start()
+        tenant = mock.patch('aviso.domainmodel.tenant.Tenant.getByName',
+                            return_value=object())
+        self.addCleanup(tenant.stop)
+        tenant.start()
+        app_user = mock.patch('aviso.domainmodel.app.User.getUserByLogin',
+                              return_value=mock.Mock(account_locked=False))
+        self.addCleanup(app_user.stop)
+        app_user.start()
+
+        self.client.post('/account/login',
+                         {'username': 'tester@aviso.com', 'password': 'secret'})
+
+        self.assertEqual(self.client.session.get_expiry_age(), 45 * 60)
 
 
 class AccessTokenTest(TestCase):
