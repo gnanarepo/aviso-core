@@ -23,6 +23,31 @@ ANONYMOUS_PATHS = {
 }
 
 
+def _release(tenant_name):
+    """Close whatever this thread opened while serving the request."""
+    try:
+        pg_conn = getattr(tenant_holder, "postgres_local_con", None)
+        if pg_conn:
+            try:
+                pg_conn.close()
+            except Exception as e:
+                logger.info("Failed to close Postgres connection: %s", e)
+
+        mongo_db = getattr(tenant_holder, "tenant_db", None)
+        if mongo_db:
+            try:
+                mongo_db.client.close()
+            except Exception as e:
+                logger.error("Failed to close Mongo connection: %s", e)
+
+        logger.info(f"Context and DB Conn cleanup completed for tenant: {tenant_name}")
+
+    except Exception as e:
+        logger.error("Failed to clean up tenant connections: %s", e)
+    finally:
+        tracer.set_trace(None)
+
+
 class SecurityContextMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -62,6 +87,9 @@ class SecurityContextMiddleware:
             tenant_name, auth_mode = context.resolve(request)
             if not tenant_name:
                 logger.warning("Unauthorized access attempt to %s", request.path)
+                # resolve() reaches Mongo before it decides, so this return has
+                # to release the connections the same way a served request does.
+                _release(tenant_name)
                 return context.unauthorized()
 
         logger.info("Received request for %s with trace_id: %s auth_mode=%s",
@@ -97,28 +125,8 @@ class SecurityContextMiddleware:
         # CLEANUP PHASE
         # =====================================================
         def cleanup():
-            try:
-                pg_conn = getattr(tenant_holder, "postgres_local_con", None)
-                if pg_conn:
-                    try:
-                        pg_conn.close()
-                    except Exception as e:
-                        logger.info("Failed to close Postgres connection: %s", e)
+            _release(tenant_name)
 
-                mongo_db = getattr(tenant_holder, "tenant_db", None)
-                if mongo_db:
-                    try:
-                        mongo_db.client.close()
-                    except Exception as e:
-                        logger.error("Failed to close Mongo connection: %s", e)
-
-                logger.info(f"Context and DB Conn cleanup completed for tenant: {tenant_name}")
-
-            except Exception as e:
-                logger.error("Failed to clean up tenant connections: %s", e)
-            finally:
-                tracer.set_trace(None)
-        
         if getattr(response, "streaming", False):
             original_stream = response.streaming_content
 
