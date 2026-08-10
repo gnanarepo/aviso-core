@@ -20,10 +20,13 @@ from accounts.session_utils import (LOGIN_USER_NAME, SWITCH_TYPE, TENANT_NAME,
                                     TENANT_USERNAME, is_authenticated,
                                     request_session_helper)
 from gbm_apis.framework.baseView import GnanaAuthenticationForm
+from gbm_apis.framework.baseView import ValidationError as GnanaValidationError
 
 logger = logging.getLogger('gnana.%s' % __name__)
 
 DEFAULT_TIME_ZONE = 'America/Los_Angeles'
+# What the middleware this was ported from falls back to (middleware.py:236).
+DEFAULT_USER_TIMEOUT = 30
 
 
 def _json(payload, status=200):
@@ -85,7 +88,16 @@ class LoginAjax(View):
             return _json({'success': False,
                           'message': 'User authentication failed'}, status=401)
 
-        if not form.is_valid():
+        try:
+            valid = form.is_valid()
+        except GnanaValidationError as e:
+            # The form raises baseView's ValidationError, which is a plain
+            # Exception — Django's full_clean() only catches its own and lets
+            # this one escape as a 500. 'User Account Locked!' arrives here.
+            logger.info('Login failed for %s: %s', username, e)
+            return _json({'success': False, 'message': str(e)}, status=401)
+
+        if not valid:
             message = ', '.join(
                 msg for errors in form.errors.values() for msg in errors)
             logger.info('Login failed for %s: %s', username, message)
@@ -94,8 +106,11 @@ class LoginAjax(View):
         auth_login(request, form.get_user())
         request_session_helper(request)
         request.session[SWITCH_TYPE] = 'tenant'
-        # No IP second factor on this service; the monolith owns that flow.
+        # The IP challenge the monolith serves has no counterpart here, so the
+        # flag is set to keep ported code happy. Sessions still expire on idle.
         request.session['VALIDIP'] = True
+        timeout = getattr(request.user, 'user_timeout', None) or DEFAULT_USER_TIMEOUT
+        request.session.set_expiry(60 * timeout)
         request.session.save()
         logger.info('Logged in %s', username)
         return None
@@ -291,7 +306,14 @@ class LoginSwitchByPassCall(LoginAjax, Switch):
             return _json({'success': False, 'message': 'Invalid request body'},
                          status=400)
 
+        # Checked before the login: perform_switch() needs a string, and a
+        # session handed out for a request that then fails is worse than a 400.
+        tenant = post_data.get('tenant') if isinstance(post_data, dict) else None
+        if not isinstance(tenant, str) or not tenant:
+            return _json({'success': False, 'message': 'Missing tenant'},
+                         status=400)
+
         failure = self.login_check(GnanaAuthenticationForm(data=post_data), request)
         if failure:
             return failure
-        return self.perform_switch(post_data.get('tenant'), request)
+        return self.perform_switch(tenant, request)
