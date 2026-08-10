@@ -691,19 +691,43 @@ class CoolerHierarchyService(object):
         return None
 
     def get_ancestors(self, node, ts=None):
-        try:
-            if ts is None:
+        # Unversioned path: served entirely from the in-memory hierarchy that was
+        # loaded once (as-of self.asof) at construction. Fast, unchanged.
+        if ts is None:
+            try:
                 return self.hier_with_ancestors[node] + [node]
-            else:
-                stack=os.environ['STACK']
-                tenant_name=sec_context.name
-                # from ..data_load.tenants import fa_connection_strings
-                # fa_connection_string = fa_connection_strings(stack, tenant_name)
-                # client = MongoClient(fa_connection_string)
-                # db=client[(tenant_name.replace('.io', '-io') if tenant_name.endswith('.io') else tenant_name.split('.')[0]) + '_cache_' + stack]
-                db = sec_context.tenant_db
-                anc_dict = {rec['node']: rec['ancestors'] for rec in self.fetch_ancestors(as_of=ts, nodes=[node],db=db)}
-                return anc_dict[node] + [node]
+            except KeyError:
+                # this would be a lot easier if we consolidated where we handled nulls
+                return ['unmapped'] if node == 'N/A' else ['not_in_hier']
+
+        # Versioned path: ancestors are resolved as-of the record's own timestamp
+        # (ts = the deal's close date, from versioned_ts()). The original code fired
+        # one recursive $graphLookup PER node -- i.e. once per drilldown, per split,
+        # per record -- which for a large result set is hundreds of thousands of
+        # round-trips and dominates request time (especially over a high-latency
+        # link).
+        #
+        # Instead we load the ENTIRE hierarchy as-of a given ts exactly once and
+        # serve every node for that ts from that in-memory table, keyed by ts in
+        # self.ancestor_cache. This collapses the per-node round-trips down to one
+        # full-hierarchy load per DISTINCT ts (close dates are day-granular, so the
+        # number of distinct ts values is small and bounded).
+        #
+        # Output is identical to the old per-node query: in fetch_ancestors the
+        # `nodes` filter only decides which documents enter the pipeline, while each
+        # node's `ancestors` chain is computed by $graphLookup from its own $parent
+        # links under `restrictSearchWithMatch: criteria` (the time filter) -- so a
+        # node's chain does not depend on which other nodes are matched. Hence
+        # table[node] here == the old fetch_ancestors(as_of=ts, nodes=[node])[node].
+        # `table[node] + [node]` still returns a fresh list per call, so nothing
+        # downstream can mutate the cached chain. The cache lives on this per-request
+        # instance, so hierarchy edits between requests are always re-read from DB.
+        table = self.ancestor_cache.get(ts)
+        if table is None:
+            table = self.load_ancestors_from_db(ts)
+            self.ancestor_cache[ts] = table
+        try:
+            return table[node] + [node]
         except KeyError:
             # this would be a lot easier if we consolidated where we handled nulls
             return ['unmapped'] if node == 'N/A' else ['not_in_hier']
