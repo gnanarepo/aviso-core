@@ -104,6 +104,14 @@ class DataLoad:
         use_core_show = ds.models['common'].config.get('fastlane_config', {}).get('use_core_show')
         viewgen_config = ds.models['common'].config.get('viewgen_config', {})
         primary_amount_field = ds.models['common'].config.get('fastlane_config', {}).get('primary_amount_field', 'as_of_Amount_USD')
+        skip_deals_with_no_leaf_fields = ds.models['common'].config.get('basic_results_config', {}).get('skip_deals_with_no_leaf_fields', False)
+        if skip_deals_with_no_leaf_fields:
+            leaf_fields = []
+            for _, v in ds.models['common'].config['viewgen_config']['hier_config'].items():
+                leaf_fields.append(v.get('leaf_field'))
+            logger.info('Leaf fields to check for skipping deals: %s', leaf_fields)
+        else:
+            logger.info('Not skipping any deals based on leaf-field')
 
         th = TimeHorizon()
         boq = epoch(th.beginsF).as_xldate()
@@ -231,7 +239,7 @@ class DataLoad:
                 # force into JSON-safe string
                 json_safe = json.dumps(raw)
                 values[f] = json.loads(json_safe)
-            
+                
             drilldown_list, split_fields = get_dd_list(viewgen_config, values, drilldowns, True)
             temp['__segs'] = drilldown_list
             if split_fields:
@@ -241,6 +249,14 @@ class DataLoad:
                             temp[fld] = val
                     else:
                         temp[fld] = val
+
+            if skip_deals_with_no_leaf_fields:
+                has_leaf_field = any(fld in temp for fld in leaf_fields)
+                if not has_leaf_field:
+                    logger.info(f"Skipping deal {temp['extid']} as it has no leaf fields. etl_deal_object: {deal}")
+                    # dont return this deal in the final results, just skip to the next deal
+                    continue
+            
             match temp.get('terminal_fate'):
                 case 'W':
                     temp['win_prob'] = 1
