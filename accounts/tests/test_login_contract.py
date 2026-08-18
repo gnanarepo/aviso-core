@@ -149,6 +149,28 @@ class LoginTest(TestCase):
         self.assertEqual(session['tenant.name'], 'aviso.com')
         self.assertEqual(session['login.user.name'], 'tester')
 
+    def test_login_does_not_depend_on_saving_the_user(self):
+        """Django's update_last_login signal calls user.save() after login.
+
+        GnanaUser.save() treats a user with no last_login as a first-time
+        login and sends a welcome mail whose template this service does not
+        ship, so that call raised and the first login of every user came back
+        as a 500. The signal is disconnected in accounts/apps.py; this asserts
+        the login no longer goes anywhere near save().
+        """
+        user = FakeUser()
+        user.last_login = None
+        user.save = mock.Mock(side_effect=AssertionError('save() must not be called'))
+        self._patch_backend(user)
+        self._patch_form_lookups()
+
+        response = self.client.post('/account/login',
+                                    {'username': 'tester@aviso.com',
+                                     'password': 'secret'})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        user.save.assert_not_called()
+
     def test_whoami_needs_a_session(self):
         self.assertEqual(self.client.get('/account/whoAmI').status_code, 401)
 
