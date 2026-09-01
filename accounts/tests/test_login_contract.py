@@ -24,7 +24,7 @@ class FakePk:
 class FakeUser:
     """Stands in for the GnanaUser the aviso package builds from Mongo."""
 
-    def __init__(self, username='tester@aviso.com'):
+    def __init__(self, username='tester@administrative.domain'):
         self.username = username
         self.email = username
         self.is_active = True
@@ -130,15 +130,50 @@ class LoginTest(TestCase):
         self._patch_form_lookups()
 
         response = self.client.post('/account/login',
-                                    {'username': 'tester@aviso.com',
+                                    {'username': 'tester@administrative.domain',
                                      'password': 'secret'})
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(response.json()['success'])
         self.assertIn('sessionid', response.cookies)
         session = self.client.session
-        self.assertEqual(session['tenant.name'], 'aviso.com')
+        self.assertEqual(session['tenant.name'], 'administrative.domain')
         self.assertEqual(session['login.user.name'], 'tester')
+
+    def test_rejects_a_tenant_user(self):
+        """Only the admin domain gets a session; tenants use an Access-Token.
+
+        Patched as though the credentials were perfect, so this asserts the
+        domain check and not an incidental lookup failure. The refusal has to
+        land before is_valid(), or a rejected caller still costs two Mongo
+        round trips.
+        """
+        user = FakeUser('tester@acme.com')
+        self._patch_backend(user)
+        self._patch_form_lookups()
+
+        with mock.patch('gbm_apis.framework.baseView.GnanaAuthenticationForm'
+                        '.is_valid') as is_valid:
+            response = self.client.post('/account/login',
+                                        {'username': 'tester@acme.com',
+                                         'password': 'secret'})
+
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.json()['success'])
+        self.assertNotIn('sessionid', response.cookies)
+        is_valid.assert_not_called()
+
+    def test_rejection_does_not_say_which_domain_is_wanted(self):
+        """A tenant user and a malformed username get the same answer."""
+        malformed = self.client.post('/account/login',
+                                     {'username': 'tester', 'password': 'x'})
+        tenant_user = self.client.post('/account/login',
+                                       {'username': 'tester@acme.com',
+                                        'password': 'x'})
+
+        self.assertEqual(malformed.status_code, tenant_user.status_code)
+        self.assertEqual(malformed.json()['message'],
+                         tenant_user.json()['message'])
 
     def test_login_does_not_depend_on_saving_the_user(self):
         """Django's update_last_login signal calls user.save() after login.
@@ -156,7 +191,7 @@ class LoginTest(TestCase):
         self._patch_form_lookups()
 
         response = self.client.post('/account/login',
-                                    {'username': 'tester@aviso.com',
+                                    {'username': 'tester@administrative.domain',
                                      'password': 'secret'})
 
         self.assertEqual(response.status_code, 200, response.content)
@@ -180,7 +215,7 @@ class LoginTest(TestCase):
         token = re.search("value='(.*)'", form).group(1)
 
         response = client.post('/account/login',
-                               {'username': 'tester@aviso.com',
+                               {'username': 'tester@administrative.domain',
                                 'password': 'secret'},
                                secure=True,
                                headers={'x-csrftoken': token,
@@ -209,7 +244,7 @@ class LoginFailureTest(TestCase):
         self._patch_form(side_effect=GnanaValidationError('User Account Locked!'))
 
         response = self.client.post('/account/login',
-                                    {'username': 'tester@aviso.com',
+                                    {'username': 'tester@administrative.domain',
                                      'password': 'secret'})
 
         self.assertEqual(response.status_code, 401)
@@ -219,7 +254,7 @@ class LoginFailureTest(TestCase):
         """perform_switch() does `'@' in tenant`, so None was a TypeError —
         raised after the login had already handed out a session."""
         response = self.client.post('/loginswitchbypass',
-                                    data=json.dumps({'username': 'tester@aviso.com',
+                                    data=json.dumps({'username': 'tester@administrative.domain',
                                                      'password': 'secret'}),
                                     content_type='application/json')
 
@@ -249,7 +284,7 @@ class SessionExpiryTest(TestCase):
         app_user.start()
 
         self.client.post('/account/login',
-                         {'username': 'tester@aviso.com', 'password': 'secret'})
+                         {'username': 'tester@administrative.domain', 'password': 'secret'})
 
         self.assertEqual(self.client.session.get_expiry_age(), 45 * 60)
 

@@ -31,7 +31,7 @@ trusted_origins = os.environ.get('TRUSTED_ORIGINS', '').split(',')
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in trusted_origins if origin.strip()]
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    # 'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -80,8 +80,8 @@ WSGI_APPLICATION = 'aviso_core.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.dummy',
+        # 'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -117,7 +117,6 @@ AUTH_USER_MODEL = 'accounts.User'
 
 AUTHENTICATION_BACKENDS = (
     'accounts.backends.SessionMongoBackend',
-    'accounts.backends.SessionSAMLBackend',
 )
 
 AUTH_PASSWORD_VALIDATORS = [

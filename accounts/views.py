@@ -73,7 +73,7 @@ class LoginAjax(View):
         failure = self.login_check(GnanaAuthenticationForm(data=request.POST), request)
         if failure:
             return failure
-        return _json({'success': True,
+        return _json({'success': True, 
                       'message': 'User Authentication Successful'})
 
     def login_check(self, form, request):
@@ -85,6 +85,19 @@ class LoginAjax(View):
 
         if not username or '@' not in username:
             logger.error('Incorrect username format.')
+            return _json({'success': False,
+                          'message': 'User authentication failed'}, status=401)
+
+        # Only the admin domain gets a session here. Every other tenant reaches
+        # this service through an Access-Token, and Switch already refuses
+        # anyone whose login tenant is not ADMIN_DOMAIN -- so a tenant user who
+        # logged in could do nothing a token does not already cover. Checked
+        # before is_valid() so a rejected caller costs no Mongo lookups, and
+        # answered with the same message as a malformed username so it does not
+        # report which domains exist.
+        if not username.endswith('@%s' % ADMIN_DOMAIN):
+            logger.info('Rejecting %s: this service only serves %s accounts',
+                        username, ADMIN_DOMAIN)
             return _json({'success': False,
                           'message': 'User authentication failed'}, status=401)
 
@@ -104,7 +117,7 @@ class LoginAjax(View):
             return _json({'success': False, 'message': message}, status=401)
 
         auth_login(request, form.get_user())
-        request_session_helper(request)
+        request_session_helper(request) 
         request.session[SWITCH_TYPE] = 'tenant'
         # The IP challenge the monolith serves has no counterpart here, so the
         # flag is set to keep ported code happy. Sessions still expire on idle.
