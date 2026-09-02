@@ -49,6 +49,16 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest 
 
+      # 4b. Test the image that is about to ship, before it ships
+      - name: Run tests
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: aviso-core-dev
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker run --rm $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            python manage.py test accounts sdk --settings=aviso_core.test_settings
+
       # 5. Render New ECS Task Definition
       - name: Fill in the new image ID in the ECS task definition
         id: task-def
