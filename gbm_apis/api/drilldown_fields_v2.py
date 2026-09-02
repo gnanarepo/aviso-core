@@ -356,7 +356,7 @@ def drilldown_values_by_owner_v2(drilldown: str, periods: Iterable[str]):
     """
     Fetch drilldown combos by owner using ETL hierarchy data.
     """
-    ds = Dataset.getByNameAndStage(name="OppDS")
+    ds = Dataset.getByNameAndStage(name="OppDS", get_from_db=True)
     viewgen_config = ds.models["common"].config.get("viewgen_config", {})
     hier_config = viewgen_config.get("hier_config", {})
 
@@ -429,9 +429,8 @@ def drilldown_values_by_period(periods, groups,):
     
     criteria = CurrentQuarterCriteriaBuilder(data_load=None, boq=boq, eoq=eoq).get_criteria()
 
-    ds = Dataset.getByNameAndStage('OppDS', None)
+    ds = Dataset.getByNameAndStage('OppDS', None, get_from_db=True)
     record_filter = ds.get_model_filter('bookings_rtfm')
-
     final_query = {
         "$and": [
             criteria,

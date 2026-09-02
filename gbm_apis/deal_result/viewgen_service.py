@@ -18,7 +18,7 @@ class CoolerViewGeneratorService(object):
     '''
     def __init__(self, perspective=None, hier_asof=None,):
         from ..deal_result.dataset import Dataset
-        ds = Dataset.getByNameAndStage('OppDS', None)
+        ds = Dataset.getByNameAndStage('OppDS', None, get_from_db=True)
         self.viewgen_config = ds.models['common'].config.get('viewgen_config', {})
 
         # TODO until we get done debugging stuff

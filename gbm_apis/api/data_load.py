@@ -100,7 +100,7 @@ class DataLoad:
         self.self_serve_setup = self_serve_setup
 
     def get_basic_results(self):
-        ds = Dataset.getByNameAndStage('OppDS', None)
+        ds = Dataset.getByNameAndStage('OppDS', None, get_from_db=True)
         use_core_show = ds.models['common'].config.get('fastlane_config', {}).get('use_core_show')
         viewgen_config = ds.models['common'].config.get('viewgen_config', {})
         primary_amount_field = ds.models['common'].config.get('fastlane_config', {}).get('primary_amount_field', 'as_of_Amount_USD')
@@ -388,7 +388,7 @@ class RevenueSchedule:
 
     def revenue_schedule(self):
         basic_results = self.basic_results
-        oppds = Dataset.getByNameAndStage(name='OppDS')
+        oppds = Dataset.getByNameAndStage(name='OppDS', get_from_db=True)
         rev_schedule_config = oppds.models['common'].config.get('rev_schedule_config', {})
         drilldown = rev_schedule_config.get('drilldown', 'Revenue')
         close_date_fld = rev_schedule_config.get('close_date_fld', 'CloseDate')
@@ -396,6 +396,7 @@ class RevenueSchedule:
         if rev_schedule_config.get('prd_rev_schedule', False):
             # convert basic_results to dict format
             extids_before_rev_schedule = [record['extid'] for record in basic_results]
+            full_records_by_extid = {record['extid']: record for record in basic_results}
             basic_results_dict = self.get_results_dict(basic_results)
             basic_results_dict = self.rev_schedule_by_period(rev_schedule_field, basic_results_dict)
             rev_period = self.period if self.period else current_period(a_datetime=epoch().as_datetime()).mnemonic
@@ -437,9 +438,16 @@ class RevenueSchedule:
             basic_results = self.get_results_list(basic_results_dict)
             extids_in_basic_results = [record['extid'] for record in basic_results]
             exluded_extids = [extid for extid in extids_before_rev_schedule if extid not in extids_in_basic_results]
+            
+            for element in basic_results:
+                if element['extid'] not in extids_before_rev_schedule:
+                    element['is_delete'] = False
+
             for opp_id in exluded_extids:
-                basic_results.append({'extid': opp_id,
-                                      'is_delete': True})
+                stub = dict(full_records_by_extid.get(opp_id, {}))
+                stub['extid'] = opp_id
+                stub['is_delete'] = True
+                basic_results.append(stub)
 
         if basic_results:
             return basic_results
