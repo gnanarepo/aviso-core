@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.http import HttpResponse
 
 
@@ -9,18 +8,12 @@ class AvisoCompatibilityMixin:
     Features:
     1. Shim Input: Adds 'request.params' (required by legacy baseView).
     2. Shim Output: Converts 'dict' responses to 'HttpResponse' (prevents Middleware crash).
-    3. Dev Mode: Bypasses AvisoView's login check if settings.DEBUG is True.
     """
 
     def dispatch(self, request, *args, **kwargs):
         # --- 1. PATCH INPUT (Before View Execution) ---
         if not hasattr(request, 'params'):
             request.params = request.GET.copy()
-
-        # --- 2. AUTH BYPASS (The "Loophole") ---
-        # If we are local, disable the strict login check in the parent AvisoView
-        if settings.DEBUG:
-            self.login_required = False
 
         # --- 3. EXECUTE PARENT VIEW ---
         # This calls the next class in the chain (AvisoView or View)

@@ -498,6 +498,9 @@ class DataLoadAPIView(AvisoCompatibilityMixin, AvisoView):
     """
 
     http_method_names = ['get', 'post']
+    # SecurityContextMiddleware authenticates the caller; AvisoView never
+    # enforced this itself, it was switched off by the DEBUG bypass.
+    login_required = False
     restrict_to_roles = {AvisoView.Role.Gnacker}
     as_json = False
 

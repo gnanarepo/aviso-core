@@ -13,6 +13,8 @@ import os
 import threading
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,10 +22,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-1b=+=%i&v#ppg*cm)4gxo*88z)k*$4&wk^-%t7m%b=t3-=9&0e'
-
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+
+# This key signs the session cookie, and the session is now what authenticates
+# a caller — anyone holding it can mint a session for any tenant. So it comes
+# from the environment, and a missing one is a hard stop rather than a silent
+# fall back to a value that lives in git. Every task has to agree on it and it
+# has to survive a deploy: change it and everyone is logged out.
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY is not set. It signs the session cookie, which '
+            'is what authenticates callers; there is no safe default.')
+    SECRET_KEY = 'django-insecure-local-development-only'
 # --- LOGIC FOR ALLOWED HOSTS ---
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
