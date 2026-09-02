@@ -64,14 +64,28 @@ def timezone(shell, tz_str, period_info=False):
     return shell._tz_name
 
 
-def tenant(shell, action, **kwargs):
-    """Placeholder for the tenant verb the legacy shell exposes.
+def tenant(shell, action=None, **kwargs):
+    """The tenant verb, limited to what the SDK itself calls on this service.
 
-    Only the reads `Shell.me()` performs are answered, and from what the
-    service already returns; tenant configuration is not served here.
+    Mirrors aviso/sdk/tenant.py. Everything else stays unserved until the API
+    behind it is migrated.
     """
+    if action is None:
+        return shell._tenant
+
+    if action == 'get_endpoint':
+        # get_micro_service_shells() asks this before it builds the etl shell.
+        return shell.api('/tenant/%s/endpoint/%s'
+                         % (shell._tenant, kwargs['endpoint']), None)
+
     if action == 'get_config' and kwargs.get('config_name') == 'timezone':
         return getattr(shell, '_tz_name', None)
+
+    if action == 'get_flag':
+        # No flag store here. The SDK calls this while polling an async job and
+        # calls .lower() on the answer, so it has to be the default, not None.
+        return kwargs.get('default', '')
+
     logger.info("tenant('%s') is not served by aviso-core", action)
     return None
 
