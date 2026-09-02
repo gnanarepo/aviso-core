@@ -74,3 +74,7 @@ celerybeat.pid
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# SDK package artefacts, built at container start
+*_SDK_VERSION
+/static/

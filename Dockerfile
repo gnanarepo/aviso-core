@@ -58,10 +58,17 @@ COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 # Copy application code
 COPY --chown=appuser:appuser . /app
 
+# COPY --chown sets ownership on the copied files but leaves /app itself owned
+# by root, so the SDK package and its version file could not be written.
+RUN chmod +x /app/docker-entrypoint.sh \
+    && mkdir -p /app/static \
+    && chown -R appuser:appuser /app
+
 USER appuser
 
 EXPOSE 8000
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 # Workers = 2*vCPU + 1 = 33 (gunicorn's standard sync formula for 16 vCPU), timeout 1200s.
 # sync workers (process-isolated) preserve legacy thread-safety assumptions.
 # --worker-tmp-dir /dev/shm and stderr error logging are Fargate-specific adjustments.

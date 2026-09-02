@@ -1,14 +1,51 @@
-import os
 import threading
-import json
 import uuid
 import logging
 from django.conf import settings
 from django.http import HttpResponse
 from aviso.framework import tenant_holder, tracer
-from aviso.settings import microservices_user
+
+from accounts import context
 
 logger = logging.getLogger('gnana.%s' % __name__)
+
+# Reachable without an identity — this is how a caller obtains one. They still
+# go through the rest of the middleware, because logging in touches Mongo and
+# Postgres and those connections have to be released like any other request.
+ANONYMOUS_PATHS = {
+    "/csrfform",
+    "/account/login",
+    "/account/logout",
+    "/account/validate_ip",
+    "/loginswitchbypass",
+    "/sdk/version",
+    "/sdk/latest",
+}
+
+
+def _release(tenant_name):
+    """Close whatever this thread opened while serving the request."""
+    try:
+        pg_conn = getattr(tenant_holder, "postgres_local_con", None)
+        if pg_conn:
+            try:
+                pg_conn.close()
+            except Exception as e:
+                logger.info("Failed to close Postgres connection: %s", e)
+
+        mongo_db = getattr(tenant_holder, "tenant_db", None)
+        if mongo_db:
+            try:
+                mongo_db.client.close()
+            except Exception as e:
+                logger.error("Failed to close Mongo connection: %s", e)
+
+        logger.info(f"Context and DB Conn cleanup completed for tenant: {tenant_name}")
+
+    except Exception as e:
+        logger.error("Failed to clean up tenant connections: %s", e)
+    finally:
+        tracer.set_trace(None)
 
 
 class SecurityContextMiddleware:
@@ -42,35 +79,21 @@ class SecurityContextMiddleware:
         trace_id = incoming_trace if incoming_trace else str(uuid.uuid4())
         tracer.set_trace(trace_id)
 
-        ## TODO: Tenant Name Extraction From Browser
-        tenant_name = (
-            request.headers.get("X-Tenant-Name") or request.GET.get("tenant_name", "aviso.com")
-        )
-        
-        if not tenant_name:
-            return HttpResponse(
-                    json.dumps({"error": "Missing X-Tenant-Name"}),
-                    status=400,
-                    content_type="application/json",
-                )
+        # Identity first, context second: a request that fails to authenticate
+        # must not leave a tenant context behind on this thread.
+        if request.path.rstrip("/") in ANONYMOUS_PATHS:
+            tenant_name, auth_mode = None, "anonymous"
+        else:
+            tenant_name, auth_mode = context.resolve(request)
+            if not tenant_name:
+                logger.warning("Unauthorized access attempt to %s", request.path)
+                # resolve() reaches Mongo before it decides, so this return has
+                # to release the connections the same way a served request does.
+                _release(tenant_name)
+                return context.unauthorized()
 
-        tenant_holder.set_context(
-            user_name=microservices_user,
-            tenant_name=tenant_name,
-            login_tenant_name=tenant_name,
-            login_user_name=microservices_user,
-            switch_type="tenant",
-            csv_version_info={},
-        )
-
-        ##Internal API-Key Validation
-        ##TODO: API KEY from DB Read Service ? HMAC
-        internal_api_key = request.headers.get("Internal-Api-Key")
-        if not internal_api_key or internal_api_key != os.environ.get("INTERNAL_API_KEY", ""):
-            logger.warning(f"Unauthorized access attempt to microservice by tenant: {tenant_name}")
-            return HttpResponse(content=json.dumps({"error": "Unauthorized"}), status=401, content_type="application/json")
-        
-        logger.info(f"Received request for {request.path} with trace_id: {trace_id} and splunk logs enabled {os.environ.get('SPLUNK_ENABLED', 'False')}")
+        logger.info("Received request for %s with trace_id: %s auth_mode=%s",
+                    request.path, trace_id, auth_mode)
 
         response = self.get_response(request)
 
@@ -102,28 +125,8 @@ class SecurityContextMiddleware:
         # CLEANUP PHASE
         # =====================================================
         def cleanup():
-            try:
-                pg_conn = getattr(tenant_holder, "postgres_local_con", None)
-                if pg_conn:
-                    try:
-                        pg_conn.close()
-                    except Exception as e:
-                        logger.info("Failed to close Postgres connection: %s", e)
+            _release(tenant_name)
 
-                mongo_db = getattr(tenant_holder, "tenant_db", None)
-                if mongo_db:
-                    try:
-                        mongo_db.client.close()
-                    except Exception as e:
-                        logger.error("Failed to close Mongo connection: %s", e)
-
-                logger.info(f"Context and DB Conn cleanup completed for tenant: {tenant_name}")
-
-            except Exception as e:
-                logger.error("Failed to clean up tenant connections: %s", e)
-            finally:
-                tracer.set_trace(None)
-        
         if getattr(response, "streaming", False):
             original_stream = response.streaming_content
 

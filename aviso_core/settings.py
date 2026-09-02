@@ -31,18 +31,21 @@ trusted_origins = os.environ.get('TRUSTED_ORIGINS', '').split(',')
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in trusted_origins if origin.strip()]
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    # 'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'gbm_apis',
+    'accounts',
+    'sdk',
     'rest_framework',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -77,10 +80,14 @@ WSGI_APPLICATION = 'aviso_core.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.dummy',
+        # 'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# Signed into the cookie: several tasks run behind one ALB and none of them
+# owns a session store.
+SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
 
 
 # if DEBUG:
@@ -105,6 +112,12 @@ DATABASES = {
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
+
+AUTH_USER_MODEL = 'accounts.User'
+
+AUTHENTICATION_BACKENDS = (
+    'accounts.backends.SessionMongoBackend',
+)
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -137,7 +150,22 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'static'
+
+AVISO_APPS = os.environ.get('AVISO_APPS', 'aviso_core')
+
+APP_PATH_DIRS = {
+    'gbm_apis': str(BASE_DIR / 'gbm_apis'),
+}
+
+SDK_VERSION_FILE_NAME = '%s_SDK_VERSION' % AVISO_APPS
+
+try:
+    with open(BASE_DIR / SDK_VERSION_FILE_NAME) as _version_file:
+        SDK_VERSION = _version_file.read().strip()
+except OSError:
+    SDK_VERSION = 'NOT_DEFINED'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
