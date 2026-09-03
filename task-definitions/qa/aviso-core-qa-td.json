@@ -13,6 +13,18 @@
         }
       ],
       "essential": true,
+      "command": [
+        "gunicorn",
+        "aviso_core.wsgi:application",
+        "--bind", "0.0.0.0:8000",
+        "--workers", "3",
+        "--timeout", "1200",
+        "--max-requests", "100",
+        "--max-requests-jitter", "20",
+        "--keep-alive", "0",
+        "--worker-tmp-dir", "/dev/shm",
+        "--error-logfile", "-"
+      ],
       "environment": [],
       "environmentFiles": [
         {
