@@ -12,6 +12,11 @@ them land here as the remaining GBM APIs are migrated.
 import logging
 import os
 
+# Relative, not absolute: inside the SDK archive this module is
+# <prefix>.gbm_apis.sdk.shell and there is no top-level gbm_apis to import.
+from ..interface import shellDateUtils
+from .data import DatasetPythonSdkFunctions
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIME_ZONE = 'America/Los_Angeles'
@@ -77,6 +82,27 @@ def tenant(shell, action, **kwargs):
 
 
 shell_methods = {
+    # Kept local: shellDateUtils.timezone calls shell.set_local_timezone(), a
+    # method avisosdk.Shell does not have. Registering it would break
+    # connect_sdk(), which calls timezone('tenant') before a session exists.
     'timezone': timezone,
     'tenant': tenant,
+
+    # Client-side date helpers. epoch() reads shell._tz_name and makes no HTTP
+    # call, so it needs no endpoint -- but it raises until a tenant is switched
+    # to, because _tz_name stays None until then.
+    'epoch': shellDateUtils.epoch,
+    'epoch2datetime': shellDateUtils.epoch2datetime,
+    'epoch2xl': shellDateUtils.epoch2xl,
+    'datetime2epoch': shellDateUtils.datetime2epoch,
+    'datetime2xl': shellDateUtils.datetime2xl,
+    'xl2datetime': shellDateUtils.xl2datetime,
+
+    # current_period/prev_period/next_period are NOT registered: they call
+    # /date/current, /date/next and /date/prev, which this service does not
+    # serve yet. get_as_of_tuples/generate_as_of_tuples inherit that dependency
+    # through current_period().
+    'dataset': DatasetPythonSdkFunctions(ds_type=''),
+    'uipmeta': DatasetPythonSdkFunctions(ds_type='uip'),
+    'sourcemeta': DatasetPythonSdkFunctions(ds_type='source'),
 }
