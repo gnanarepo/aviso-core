@@ -10,8 +10,23 @@ Two commands the legacy class had are deliberately absent: ``list`` (DatasetList
 was not ported, so GET /dataset has no view) and ``indexes`` (/index_list/<ds>
 is not served here).
 """
+from __future__ import print_function
+
 import logging
-from urllib.parse import urlencode
+
+import six
+
+# SDK clients still run Python 2, so this has to import under both. See the
+# same block in ../interface/base.py.
+if six.PY2:
+    from urllib import urlencode
+else:
+    from urllib.parse import urlencode
+
+# 'basestring'/'long' on py2, 'str'/'int' on py3. Taken from six rather than
+# named directly so the py2 builtins are never referenced under py3.
+basestring = six.string_types[0]
+long = six.integer_types[-1]
 
 from ..interface.base import Argument, BaseSDKFunction, CommandMeta
 
@@ -20,10 +35,10 @@ logger = logging.getLogger()
 BASE_PATH = '/gbm/dataset'
 
 dataset = lambda: Argument(name='dataset',
-                           arg_type=(str, dict),
+                           arg_type=(basestring, dict),
                            required=False)
 sandbox = lambda: Argument(name='sandbox',
-                           arg_type=(str,))
+                           arg_type=(basestring,))
 
 
 class DatasetPythonSdkFunctions(BaseSDKFunction):
@@ -37,11 +52,11 @@ class DatasetPythonSdkFunctions(BaseSDKFunction):
             arguments=[
                 dataset(),
                 sandbox(),
-                Argument(name='file_type', arg_type=(str,)),
-                Argument(name='map', arg_type=(str,)),
-                Argument(name='model', arg_type=(str,)),
-                Argument(name='param', arg_type=(str,)),
-                Argument(name='field', arg_type=(str,)),
+                Argument(name='file_type', arg_type=(basestring,)),
+                Argument(name='map', arg_type=(basestring,)),
+                Argument(name='model', arg_type=(basestring,)),
+                Argument(name='param', arg_type=(basestring,)),
+                Argument(name='field', arg_type=(basestring,)),
                 Argument(name='full_config', arg_type=(bool,))
             ],
             url_pattern=None,
@@ -52,11 +67,11 @@ class DatasetPythonSdkFunctions(BaseSDKFunction):
             arguments=[
                 dataset(),
                 sandbox(),
-                Argument(name='file_type', arg_type=(str,)),
-                Argument(name='map', arg_type=(str,)),
-                Argument(name='model', arg_type=(str,)),
-                Argument(name='param', arg_type=(str,)),
-                Argument(name='field', arg_type=(str,)),
+                Argument(name='file_type', arg_type=(basestring,)),
+                Argument(name='map', arg_type=(basestring,)),
+                Argument(name='model', arg_type=(basestring,)),
+                Argument(name='param', arg_type=(basestring,)),
+                Argument(name='field', arg_type=(basestring,)),
                 Argument(name='full_config', arg_type=(bool,))
             ],
             url_pattern=None,
@@ -76,7 +91,7 @@ class DatasetPythonSdkFunctions(BaseSDKFunction):
             arguments=[
                 dataset(),
                 Argument(name='new_value',
-                         arg_type=(str, dict, bool, list, set, tuple, int, float), required=True),
+                         arg_type=(basestring, dict, bool, list, set, tuple, int, float, long), required=True),
                 Argument(name='save_on_error', arg_type=(bool,))
             ],
             url_pattern=None,
@@ -96,9 +111,9 @@ class DatasetPythonSdkFunctions(BaseSDKFunction):
             arguments=[
                 dataset(),
                 sandbox(),
-                Argument(name='action', arg_type=(str,), required=True),
-                Argument(name='new_value', arg_type=(str, dict, bool, list, set, tuple, int, float)),
-                Argument(name='path', arg_type=(str,), required=True),
+                Argument(name='action', arg_type=(basestring,), required=True),
+                Argument(name='new_value', arg_type=(basestring, dict, bool, list, set, tuple, int, float, long)),
+                Argument(name='path', arg_type=(basestring,), required=True),
                 Argument(name='save_on_error', arg_type=(bool,))
             ],
             url_pattern=None,

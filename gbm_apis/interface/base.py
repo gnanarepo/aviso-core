@@ -1,10 +1,28 @@
+from __future__ import print_function
+
 from collections import namedtuple, defaultdict
 import functools
 import json
 import logging
 import re
 import time
-from urllib.parse import urlencode
+
+import six
+
+# SDK clients still run Python 2 (aviso-sdk's setup.py branches on
+# sys.version_info.major, and the gshell checkouts are py2), so this module has
+# to import under both. urllib.parse does not exist on py2, and py2 unicode
+# literals are not instances of str -- hence the aliases below, which the type
+# declarations in the command metadata use.
+if six.PY2:
+    from urllib import urlencode
+else:
+    from urllib.parse import urlencode
+
+# 'basestring'/'long' on py2, 'str'/'int' on py3. Taken from six rather than
+# named directly so the py2 builtins are never referenced under py3.
+basestring = six.string_types[0]
+long = six.integer_types[-1]
 
 from .shellDateUtils import EpochClass
 
@@ -62,7 +80,7 @@ class GnanaSDKError(Exception):
     def __init__(self, message):
         self.details = {}
         #self.http_status = http_status
-        if(isinstance(message, str)):
+        if(isinstance(message, basestring)):
             logger.error(message)
             super(GnanaSDKError, self).__init__(message)
             self.details['_error'] = message
@@ -85,13 +103,13 @@ class BaseSDKFunction(object):
 
     def __init__(self):
         self.__name__ = self.__class__.__name__
-        if isinstance(self.default_command, str):
+        if isinstance(self.default_command, basestring):
             if self.default_command not in self.meta_commands:
                 raise Exception('Default command not in the command list')
 
     def __call__(self, shell, *args, **kwargs):
         if len(args) == 0:
-            if isinstance(self.default_command, str):
+            if isinstance(self.default_command, basestring):
                 command = self.default_command
             elif self.default_command:
                 command = self.default_command(kwargs)
@@ -126,9 +144,9 @@ class BaseSDKFunction(object):
         all_args = list(kwargs.keys())
         special_args = [Argument(name='debug', arg_type=(bool,)),
                         Argument(name='api_profile', arg_type=(bool,)),
-                        Argument(name='profile', arg_type=(str,)),
+                        Argument(name='profile', arg_type=(basestring,)),
                         Argument(name='wait_for_pool', arg_type=(bool,)),
-                        Argument(name='worker_pool', arg_type=(str,))]
+                        Argument(name='worker_pool', arg_type=(basestring,))]
         command_metadata.arguments.extend(special_args)
         for each_arg in command_metadata.arguments:
             arg_name = each_arg.name
@@ -136,7 +154,7 @@ class BaseSDKFunction(object):
             if arg_name in all_args:
                 all_args.remove(arg_name)
 
-            if isinstance(each_arg.required, str):
+            if isinstance(each_arg.required, basestring):
                 required_groups[each_arg.required].add(arg_name)
 
             # This argument is not supplied. Check if a default can come from
@@ -161,7 +179,7 @@ class BaseSDKFunction(object):
                     if not re.match(r'^\w+$', kwargs[arg_name]):
                         raise GnanaSDKError(
                             "Don't use special characters in stage name. Please use alphanumeric only.")
-                if isinstance(each_arg.required, str):
+                if isinstance(each_arg.required, basestring):
                     groups_found.add(each_arg.required)
 
                 # Get the value
@@ -169,7 +187,7 @@ class BaseSDKFunction(object):
 
                 # Validate the type
                 if EpochClass == each_arg.arg_type[0]:
-                    if isinstance(value, int):
+                    if isinstance(value, (long, int)):
                         pass
                     elif isinstance(value, EpochClass) or type(value).__name__ == 'EpochClass':
                         kwargs[arg_name] = value.as_epoch()
@@ -244,10 +262,10 @@ class BaseSDKFunction(object):
 
     def call_url(self, shell, **kwargs):
         def processurl(qvar, args=[]):
-            if isinstance(qvar, str):
+            if isinstance(qvar, basestring):
                 for arg in args:
                     qvar = qvar.replace('<' + arg + '>', (kwargs[arg] if isinstance(
-                        kwargs[arg], str) else json.dumps(kwargs[arg])))
+                        kwargs[arg], basestring) else json.dumps(kwargs[arg])))
             return qvar
 
         def processquery(qvar):

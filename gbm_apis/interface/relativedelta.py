@@ -16,7 +16,7 @@ from six import integer_types
 from warnings import warn
 
 
-class weekday:
+class weekday(object):
     __slots__ = ["weekday", "n"]
 
     def __init__(self, weekday, n=None):
@@ -59,7 +59,7 @@ MO, TU, WE, TH, FR, SA, SU = weekdays = tuple(weekday(x) for x in range(7))
 __all__ = ["relativedelta", "MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
 
-class relativedelta:
+class relativedelta(object):
     """
     The relativedelta type is designed to be applied to an existing datetime and
     can replace specific components of that datetime, or represents an interval

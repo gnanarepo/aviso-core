@@ -103,6 +103,33 @@ class PrepareSdkTest(SimpleTestCase):
                         self.fail('%s imports %r, which SDK clients do not '
                                   'necessarily have installed' % (name, root))
 
+    def test_bundle_imports_under_python_2(self):
+        """SDK clients are a mix of py2 and py3, so the bundle must suit both.
+
+        The py2 gshell checkouts fail with `ImportError: No module named parse`
+        on an unguarded `from urllib.parse import ...`, and that fires inside
+        _fetch_methods, which re-raises -- so it breaks connect_sdk() outright
+        rather than just dropping a verb. Guarded imports sit inside an
+        `if six.PY2:` block and so are indented; a module-level one is not.
+        """
+        py3_only_modules = {'urllib.parse', 'queue', 'configparser', 'io.StringIO'}
+
+        with zipfile.ZipFile(self.archive) as bundle:
+            for name in bundle.namelist():
+                if not name.endswith('.py'):
+                    continue
+                tree = ast.parse(bundle.read(name).decode())
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ImportFrom) and node.module in py3_only_modules:
+                        self.assertGreater(
+                            node.col_offset, 0,
+                            '%s:%d imports %s unguarded; wrap it in an '
+                            'if six.PY2/else block so py2 clients can import it'
+                            % (name, node.lineno, node.module))
+                    if isinstance(node, ast.JoinedStr):   # an f-string
+                        self.fail('%s:%d uses an f-string, which is a py2 '
+                                  'SyntaxError' % (name, node.lineno))
+
     def test_zipimport_yields_shell_methods(self):
         """This is avisosdk._fetch_methods, run against our archive."""
         importer = _MetaPathZipImporter(self.archive)
