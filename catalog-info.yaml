@@ -1,0 +1,80 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+
+metadata:
+
+  # ---------------------------------------------------------------------------
+  # Identity
+  # ---------------------------------------------------------------------------
+
+  name: aviso-core
+  title: aviso-core
+  description: aviso-core is a microservice
+
+  # ---------------------------------------------------------------------------
+  # Search Tags
+  # ---------------------------------------------------------------------------
+
+  tags:
+    - backend
+    - python
+    - alb:private
+    - aws
+    - eks
+    - env:dev
+    - cluster:dev-cluster
+
+  # ---------------------------------------------------------------------------
+  # Quick Links
+  # ---------------------------------------------------------------------------
+
+  links:
+
+    - url: https://us-east-1.console.aws.amazon.com/eks/clusters/dev-cluster
+      title: EKS Cluster
+      icon: cloud
+
+    - url: https://us-east-1.console.aws.amazon.com/ecr/repositories/private/369521641981/dev/aviso-core/_/details?region=us-east-1
+      title: ECR Repository
+      icon: cloud
+
+  # ---------------------------------------------------------------------------
+  # Backstage Plugin Integrations
+  # ---------------------------------------------------------------------------
+
+  annotations:
+    # GitHub Integration
+    github.com/project-slug: gnanarepo/aviso-core
+
+    # TechDocs
+    backstage.io/techdocs-ref: dir:.
+
+    # Source Code Location
+    backstage.io/source-location: url:https://github.com/gnanarepo/aviso-core
+
+    # Kubernetes Plugin Mapping
+    backstage.io/kubernetes-id: aviso-core
+
+    # Kubernetes Namespace Mapping
+    backstage.io/kubernetes-namespace: dev
+
+spec:
+  type: service
+  lifecycle: dev
+  owner: team:backend
+  system: aviso-core
+  dependsOn:
+    - resource:dev-cluster
+
+---
+
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+
+metadata:
+  name: dev-cluster
+  description: Aviso development EKS cluster
+
+spec:
+  type: kubernetes-cluster
+  owner: team:platform
