@@ -1,0 +1,152 @@
+name: Build & Deploy (dev-cluster)
+
+on:
+  push:
+    branches:
+      - develop
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+          - demo
+
+concurrency:
+  group: deploy-${{ github.event_name == 'push' && 'dev' || inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+
+    runs-on: 'aviso-core-runner-dev'
+
+    timeout-minutes: 60
+
+    env:
+      AWS_REGION: us-east-1
+      SERVICE_NAME: aviso-core
+
+    steps:
+
+      # -------------------------
+      # Checkout code
+      # -------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Set variables
+      # -------------------------
+      - name: Set variables
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            ENV=dev
+          else
+            ENV="${{ inputs.environment }}"
+          fi
+
+          echo "ENV=$ENV" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=369521641981" >> $GITHUB_ENV
+          echo "ECR_REPOSITORY=$ENV/$SERVICE_NAME" >> $GITHUB_ENV
+          echo "EKS_CLUSTER_NAME=dev-cluster" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+
+          echo "Deploying $SERVICE_NAME to environment: $ENV"
+          echo "ECR repository: $ENV/$SERVICE_NAME"
+
+      # -------------------------
+      # Configure AWS credentials
+      # -------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # -------------------------
+      # Login to ECR
+      # -------------------------
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # -------------------------
+      # Build Docker image
+      # -------------------------
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg GITHUB_TOKEN=${{ secrets.ACCESS_TOKEN }} \
+            -t $SERVICE_NAME:$IMAGE_TAG .
+
+      # -------------------------
+      # Tag Docker image
+      # -------------------------
+      - name: Tag Docker image
+        run: |
+          docker tag $SERVICE_NAME:$IMAGE_TAG \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+
+      # -------------------------
+      # Push to ECR
+      # -------------------------
+      - name: Push to ECR
+        run: |
+          docker push \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+
+      # -------------------------
+      # Setup Helm
+      # -------------------------
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      # -------------------------
+      # Setup kubectl
+      # -------------------------
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      # -------------------------
+      # Configure kubeconfig
+      # -------------------------
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $EKS_CLUSTER_NAME
+
+      # -------------------------
+      # Add Helm repo
+      # -------------------------
+      - name: Add Helm repo
+        run: |
+          helm repo add aviso-ms https://gnanarepo.github.io/helm-github-pages
+          helm repo update
+
+      # -------------------------
+      # Deploy via Helm
+      # -------------------------
+      - name: Deploy via Helm
+        run: |
+          helm upgrade --install $SERVICE_NAME aviso-ms/ms-templates \
+            -f deploy/helm-values/${ENV}.yaml \
+            --set image.repository=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY \
+            --set image.tag=$IMAGE_TAG \
+            --namespace ${ENV} \
+            --create-namespace
+
+      # -------------------------
+      # Verify deployment rollout
+      # -------------------------
+      - name: Verify deployment rollout
+        run: |
+          kubectl rollout status deployment/$SERVICE_NAME \
+            -n ${ENV} \
+            --timeout=300s

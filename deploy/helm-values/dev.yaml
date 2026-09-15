@@ -1,0 +1,91 @@
+serviceName: aviso-core
+replicaCount: 1
+
+image:
+  repository: 369521641981.dkr.ecr.us-east-1.amazonaws.com/dev/aviso-core
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+startCommand: "gunicorn aviso_core.wsgi:application --bind 0.0.0.0:8000 --workers 33 --timeout 1200 --max-requests 100 --max-requests-jitter 20 --keep-alive 0 --worker-tmp-dir /dev/shm --error-logfile -"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+env:
+  - name: APP_PORT
+    value: "8000"
+  - name: GUNICORN_WORKERS
+    value: "4"
+
+extraSecretRefs:
+  - aviso-core-env
+
+s3Mount:
+  enabled: false
+
+initContainer:
+  enabled: false
+
+serviceAccount:
+  create: false
+  name: "aviso-core-sa"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::369521641981:role/aviso-core-irsa-role"
+
+internalIngress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/group.name: "dev-internal-alb"
+    alb.ingress.kubernetes.io/scheme: "internal"
+    alb.ingress.kubernetes.io/target-type: "ip"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:369521641981:certificate/1fb720b5-5cf3-4e3d-a027-7d669922a70d"
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/healthcheck-protocol: "HTTP"
+    alb.ingress.kubernetes.io/healthcheck-port: "traffic-port"
+    alb.ingress.kubernetes.io/healthcheck-path: "/gbm/health/"
+    alb.ingress.kubernetes.io/success-codes: "200"
+  hosts:
+    - host: aviso-core-dev-test.aviso.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  requests:
+    cpu: "4"
+    memory: "8Gi"
+  limits:
+    cpu: "8"
+    memory: "16Gi"
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 90
+    scaleUp:
+      stabilizationWindowSeconds: 90
+
+splunk:
+  host: "http-inputs-aviso.splunkcloud.com"
+  port: 443
+  index: "aux-dev"
+
+fluentbit:
+  enabled: true
+  image: "fluent/fluent-bit:2.1.4"
+  logLevel: info
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
