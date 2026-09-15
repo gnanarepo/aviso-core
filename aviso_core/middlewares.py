@@ -24,28 +24,38 @@ ANONYMOUS_PATHS = {
 
 
 def _release(tenant_name):
-    """Close whatever this thread opened while serving the request."""
+    """Close whatever this thread opened while serving the request.
+
+    Reads thread_local directly: tenant_db and postgres_local_con are
+    properties that CREATE a connection when the thread has none, so touching
+    them here makes cleanup open the very things it is meant to close.
+    """
+    tl = getattr(tenant_holder, "thread_local", None)
     try:
-        pg_conn = getattr(tenant_holder, "postgres_local_con", None)
-        if pg_conn:
-            try:
-                pg_conn.close()
-            except Exception as e:
-                logger.info("Failed to close Postgres connection: %s", e)
+        if tl is not None:
+            pg_conn = getattr(tl, "postgres_local_con", None)
+            if pg_conn is not None:
+                try:
+                    pg_conn.close()
+                except Exception as e:
+                    logger.info("Failed to close Postgres connection: %s", e)
+                del tl.postgres_local_con
 
-        mongo_db = getattr(tenant_holder, "tenant_db", None)
-        if mongo_db:
-            try:
-                mongo_db.client.close()
-            except Exception as e:
-                logger.error("Failed to close Mongo connection: %s", e)
+            db_map = getattr(tl, "tenant_db_map", None)
+            if db_map:
+                for tenant, db in list(db_map.items()):
+                    try:
+                        db.client.close()
+                    except Exception as e:
+                        logger.error("Failed to close Mongo connection for %s: %s", tenant, e)
+                db_map.clear()
 
-        logger.info(f"Context and DB Conn cleanup completed for tenant: {tenant_name}")
-
+        logger.info("Context and DB Conn cleanup completed for tenant: %s", tenant_name)
     except Exception as e:
         logger.error("Failed to clean up tenant connections: %s", e)
     finally:
         tracer.set_trace(None)
+
 
 
 class SecurityContextMiddleware:

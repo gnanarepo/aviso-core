@@ -11,7 +11,16 @@ from aviso.common.datasetdesigner import create_dataset, modify_dataset, purge_d
  
 from gbm_apis.framework.baseView import AvisoView
 from gbm_apis.framework.mixins import AvisoCompatibilityMixin
-from gbm_apis.domainmodel.datameta import Dataset
+# Same class service-infrastructure's DatasetView reads through, and the same
+# one aviso.common.datasetdesigner writes through -- so this endpoint matches
+# gbm-service, and the read and write paths can no longer diverge.
+#
+# The gbm_apis fork was returning an ETL-merged view: its getByNameAndStage
+# calls get_from_micro() whenever sec_context.is_etl_service_enabled, which
+# forces 'maps' and 'filetypes' to the ETL service's values. It also omits
+# 'discrepancy' from attrset_names, so a discrepancy block written here read
+# back invisible.
+from aviso.domainmodel.datameta import DSClass as Dataset
 from utils import GnanaError
 
 
